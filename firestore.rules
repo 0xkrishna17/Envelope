@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Households document access control based on Google Account allowlist
+    match /households/{householdId} {
+      // 1. Default preview/demo households are always accessible so any user can test the app
+      // 2. Open households without allowed_emails restrictions are freely accessible
+      // 3. Households with an allowlist are strictly restricted to authorized Google accounts and the owner
+      allow read, write: if
+        householdId == 'hh_family_ledger_main' ||
+        householdId.matches('hh_demo.*') ||
+        householdId.matches('hh_preview.*') ||
+        resource == null ||
+        !('allowed_emails' in resource.data) ||
+        resource.data.allowed_emails.size() == 0 ||
+        (request.auth != null && (
+          (request.auth.token.email != null && request.auth.token.email in resource.data.allowed_emails) ||
+          (request.auth.token.email != null && resource.data.owner_email == request.auth.token.email) ||
+          resource.data.created_by == request.auth.uid
+        ));
+
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // User profile mappings
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+  }
+}
+

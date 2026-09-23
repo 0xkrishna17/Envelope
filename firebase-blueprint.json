@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Maps authenticated user to their active household",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "activeHouseholdId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "activeHouseholdId"]
+    },
+    "Household": {
+      "title": "Household",
+      "description": "Shared household envelope ledger",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "currency": { "type": "string" },
+        "created_by": { "type": "string" },
+        "owner_email": { "type": "string" },
+        "allowed_emails": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "created_at": { "type": "string" },
+        "first_time_intro_completed": { "type": "boolean" },
+        "first_time_intro_completed_at": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Category": {
+      "title": "Envelope Category",
+      "description": "Budget envelope with target and styling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "household_id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "target_amount": { "type": "number" },
+        "is_unallocated": { "type": "boolean" },
+        "is_archived": { "type": "boolean" }
+      },
+      "required": ["id", "household_id", "name"]
+    },
+    "Transaction": {
+      "title": "Ledger Transaction",
+      "description": "Expense logged against an envelope",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "household_id": { "type": "string" },
+        "category_id": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "payment_method": { "type": "string" },
+        "logged_by_user_id": { "type": "string" },
+        "reconciliation_status": { "type": "string" }
+      },
+      "required": ["id", "household_id", "category_id", "amount", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Authenticated user mappings"
+    },
+    "/households/{householdId}": {
+      "schema": "Household",
+      "description": "Household documents"
+    },
+    "/households/{householdId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Household budget envelopes"
+    },
+    "/households/{householdId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Household transactions"
+    }
+  }
+}
