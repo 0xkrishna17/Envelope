@@ -2,17 +2,23 @@ import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
 import { calculateCategoryPendingDebt } from '../utils/budgetLogic';
-import { Bell, Check, X, Clock, Globe, Smartphone, Send } from 'lucide-react';
+import { ArrowLeft, Bell, Check, X, Clock, Globe, Smartphone, Send } from 'lucide-react';
 
 interface NotificationSettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
 }
 
-export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps> = ({
-  isOpen,
+export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const {
     pushSettings,
     updatePushSettings,
@@ -45,7 +51,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updatePushSettings(reminderTime, enabled);
-    onClose();
+    handleBack();
   };
 
   const handleTestNotification = () => {
@@ -56,33 +62,37 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-md bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-[#AF7832]" />
-            <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-              Daily Payback Reminder (§4.5)
-            </h2>
+    <div className="w-full max-w-2xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-notifications-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#AF7832]/20 text-[#AF7832] flex items-center justify-center shadow-xs">
+            <Bell className="w-4 h-4" />
           </div>
-          <button
-            onClick={onClose}
-            id="close-notifications-modal"
-            className="p-1.5 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            Daily Payback Reminder (§4.5)
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
+        {/* Subtitle Bar */}
+        <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30">
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            A scheduled reminder fires each evening for household partners if any credit card spend is still awaiting transfer from Spend → Salary account
+          </p>
         </div>
 
-        <form onSubmit={handleSave} className="p-5 flex flex-col gap-4">
-          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-            A scheduled reminder fires each evening for household partners if any credit card spend is still awaiting transfer from Spend → Salary account.
-          </p>
+        <form onSubmit={handleSave} className="p-5 sm:p-7 flex flex-col gap-4">
 
           {/* Toggle */}
           <div className="flex items-center justify-between p-3 rounded-xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F]">
@@ -188,3 +198,5 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
     </div>
   );
 };
+
+export const NotificationSettingsModal = NotificationSettingsScreen;

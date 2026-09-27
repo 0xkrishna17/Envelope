@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { Invite, Membership } from '../types';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
-import { X, Copy, Check, Users, Clock, Shield, Share2, Edit2, Trash2, AlertTriangle } from 'lucide-react';
+import { X, Copy, Check, Users, Clock, Share2, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 
 interface HouseholdInviteModalProps {
   isOpen: boolean;
@@ -321,17 +321,6 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
                   >
                     {copied ? 'Link Copied!' : 'Copy Link'}
                   </button>
-                </div>
-
-                {/* 401 Explanation Callout */}
-                <div className="p-2.5 rounded-xl bg-[#F9ECE8]/70 dark:bg-[#331D16]/70 border border-[#E8C5BC] dark:border-[#5E261B] text-[11px] text-[#87341D] dark:text-[#F3B3A2] space-y-1">
-                  <div className="font-semibold flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-[#B85D43]" />
-                    <span>Why did your partner get 401 Unauthorized?</span>
-                  </div>
-                  <p className="leading-relaxed">
-                    Private dev URLs starting with <code className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded font-mono text-[10px]">ais-dev-...</code> require developer login. We have automatically converted this invite link to the public preview (<code className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded font-mono text-[10px]">ais-pre-...</code>), which works seamlessly on your partner's phone!
-                  </p>
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] text-[#78716C]">

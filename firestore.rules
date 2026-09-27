@@ -3,21 +3,41 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Households document access control based on Google Account allowlist
     match /households/{householdId} {
-      // 1. Default preview/demo households are always accessible so any user can test the app
-      // 2. Open households without allowed_emails restrictions are freely accessible
-      // 3. Households with an allowlist are strictly restricted to authorized Google accounts and the owner
+      // Helper to check if the current user has access to this household
+      function isUserAuthorized() {
+        return request.auth != null && (
+          (request.auth.token.email != null && (
+            ('allowed_emails' in resource.data && request.auth.token.email in resource.data.allowed_emails) ||
+            ('household' in resource.data && 'allowed_emails' in resource.data.household && request.auth.token.email in resource.data.household.allowed_emails) ||
+            ('owner_email' in resource.data && resource.data.owner_email == request.auth.token.email) ||
+            ('household' in resource.data && 'owner_email' in resource.data.household && resource.data.household.owner_email == request.auth.token.email)
+          )) ||
+          ('created_by' in resource.data && resource.data.created_by == request.auth.uid) ||
+          ('household' in resource.data && 'created_by' in resource.data.household && resource.data.household.created_by == request.auth.uid)
+        );
+      }
+
+      // Check if this household has established an allowlist or owner restriction
+      function hasAccessRestrictions() {
+        return (
+          ('allowed_emails' in resource.data && resource.data.allowed_emails.size() > 0) ||
+          ('household' in resource.data && 'allowed_emails' in resource.data.household && resource.data.household.allowed_emails.size() > 0) ||
+          ('owner_email' in resource.data && resource.data.owner_email != null && resource.data.owner_email != '') ||
+          ('household' in resource.data && 'owner_email' in resource.data.household && resource.data.household.owner_email != null && resource.data.household.owner_email != '')
+        );
+      }
+
+      // 1. Default preview/demo households are open
+      // 2. Creating a new document is permitted
+      // 3. Open households without restrictions are permitted
+      // 4. Restricted households require authorized Google account
       allow read, write: if
         householdId == 'hh_family_ledger_main' ||
         householdId.matches('hh_demo.*') ||
         householdId.matches('hh_preview.*') ||
         resource == null ||
-        !('allowed_emails' in resource.data) ||
-        resource.data.allowed_emails.size() == 0 ||
-        (request.auth != null && (
-          (request.auth.token.email != null && request.auth.token.email in resource.data.allowed_emails) ||
-          (request.auth.token.email != null && resource.data.owner_email == request.auth.token.email) ||
-          resource.data.created_by == request.auth.uid
-        ));
+        !hasAccessRestrictions() ||
+        isUserAuthorized();
 
       match /{document=**} {
         allow read, write: if true;
@@ -30,4 +50,5 @@ service cloud.firestore {
     }
   }
 }
+
 

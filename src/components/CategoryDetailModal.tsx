@@ -4,12 +4,25 @@ import { formatPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { formatSelectedMonth } from '../utils/dateUtils';
 import { Transaction } from '../types';
-import { X, Plus, PlusCircle, CreditCard, RefreshCw, Calendar, ArrowDownLeft, ArrowUpRight, Edit3, ArrowLeftRight } from 'lucide-react';
+import {
+  ArrowLeft,
+  X,
+  Plus,
+  PlusCircle,
+  CreditCard,
+  RefreshCw,
+  Calendar,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Edit3,
+  ArrowLeftRight,
+} from 'lucide-react';
 
 interface CategoryDetailModalProps {
   categoryId: string | null;
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   onQuickSpend: (catId: string) => void;
   onEditTransaction: (tx: Transaction) => void;
   onReconcileCategory: (catId: string) => void;
@@ -17,16 +30,21 @@ interface CategoryDetailModalProps {
   onAddFunds?: (catId: string) => void;
 }
 
-export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
+export const EnvelopeDetailScreen: React.FC<CategoryDetailModalProps> = ({
   categoryId,
-  isOpen,
+  isOpen = true,
   onClose,
+  onBack,
   onQuickSpend,
   onEditTransaction,
   onReconcileCategory,
   onMoveFunds,
   onAddFunds,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const {
     categories,
     categoryBalances,
@@ -87,13 +105,33 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
   const isOverspent = availableNow < 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-lg bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200 max-h-[90vh] flex flex-col"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
+    <div className="w-full max-w-4xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Header Bar */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-category-detail-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back to Envelopes</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-white shadow-xs"
+            style={{ backgroundColor: category.color }}
+          >
+            {renderCategoryIcon(category.icon, 'w-4 h-4')}
+          </div>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            {category.name} Envelope
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden flex flex-col">
+        {/* Category Identity Banner */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
           <div className="flex items-center gap-2.5">
             <div
@@ -111,13 +149,9 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
               </span>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            id="close-category-detail-modal"
-            className="p-1.5 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <span className="text-xs px-2.5 py-1 rounded-lg bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] font-mono text-[#78716C] dark:text-[#A8A29E]">
+            {category.is_unallocated ? 'Built-in Surplus' : 'Envelope'}
+          </span>
         </div>
 
         {/* Balance Hero */}
@@ -140,7 +174,7 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleBack();
                   onReconcileCategory(category.id);
                 }}
                 className="px-3 py-2 rounded-xl bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] border border-[#E8C5BC] dark:border-[#4D281E] text-xs font-semibold flex items-center gap-1.5"
@@ -150,11 +184,11 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
               </button>
             )}
 
-            {onMoveFunds && (
+            {onMoveFunds && !category.is_unallocated && (
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  handleBack();
                   onMoveFunds(category.id);
                 }}
                 className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors ${
@@ -173,20 +207,20 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
                 type="button"
                 id="category-detail-add-funds-btn"
                 onClick={() => {
-                  onClose();
+                  handleBack();
                   onAddFunds(category.id);
                 }}
                 className="px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
               >
                 <PlusCircle className="w-3.5 h-3.5 text-[#2C523B]" />
-                <span>Add Money</span>
+                <span>{category.is_unallocated ? 'Add Money to Envelope' : 'Add Money'}</span>
               </button>
             )}
 
             <button
               type="button"
               onClick={() => {
-                onClose();
+                handleBack();
                 onQuickSpend(category.id);
               }}
               className="px-3 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold flex items-center gap-1.5 shadow-xs"
@@ -234,7 +268,7 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
                   <div
                     key={tx.id}
                     onClick={() => {
-                      onClose();
+                      handleBack();
                       onEditTransaction(tx);
                     }}
                     id={`cat-tx-${tx.id}`}
@@ -343,3 +377,5 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({
     </div>
   );
 };
+
+export const CategoryDetailModal = EnvelopeDetailScreen;

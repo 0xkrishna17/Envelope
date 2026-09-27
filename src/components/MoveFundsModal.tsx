@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import {
+  ArrowLeft,
   X,
   ArrowLeftRight,
   ArrowRight,
@@ -15,20 +16,26 @@ import {
 } from 'lucide-react';
 
 interface MoveFundsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   initialFromCategoryId?: string;
   initialToCategoryId?: string;
   initialAmountPaise?: number;
 }
 
-export const MoveFundsModal: React.FC<MoveFundsModalProps> = ({
-  isOpen,
+export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
   initialFromCategoryId,
   initialToCategoryId,
   initialAmountPaise,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const {
     categories,
     categoryBalances,
@@ -170,45 +177,49 @@ export const MoveFundsModal: React.FC<MoveFundsModalProps> = ({
     setAmountRupees('');
     setNote('');
 
-    // Auto close after brief confirmation
+    // Auto return after brief confirmation
     setTimeout(() => {
-      onClose();
+      handleBack();
     }, 1200);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-lg bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200 max-h-[90vh] flex flex-col"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#486B88] text-white flex items-center justify-center shadow-xs">
-              <ArrowLeftRight className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-                Move Envelope Funds
-              </h3>
-              <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E]">
-                Reallocate money between envelopes in your household ledger
-              </p>
-            </div>
+    <div className="w-full max-w-3xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-move-funds-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#486B88] text-white flex items-center justify-center shadow-xs">
+            <ArrowLeftRight className="w-4 h-4" />
           </div>
-          <button
-            onClick={onClose}
-            id="close-move-funds-modal"
-            className="p-1.5 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            {fromCategory?.is_unallocated ? 'Add Money to Envelope from Surplus' : 'Move Envelope Funds'}
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
+        {/* Subtitle Bar */}
+        <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30">
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            {fromCategory?.is_unallocated
+              ? 'Allocate your unallocated surplus funds to any envelope in your household ledger'
+              : 'Reallocate money between envelopes in your household ledger'}
+          </p>
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="p-5 sm:p-7">
           {successMsg ? (
             <div className="p-4 rounded-xl bg-[#E8F2EB] dark:bg-[#1C3224] border border-[#BBDBC3] dark:border-[#2E583C] text-[#2C523B] dark:text-[#A8D1B7] text-xs font-semibold flex items-center gap-2 mb-4 animate-in fade-in">
               <Check className="w-4 h-4 shrink-0" />
@@ -471,8 +482,8 @@ export const MoveFundsModal: React.FC<MoveFundsModalProps> = ({
             <div className="flex items-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-xs font-semibold transition-colors"
+                onClick={handleBack}
+                className="flex-1 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-xs font-semibold transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -481,10 +492,14 @@ export const MoveFundsModal: React.FC<MoveFundsModalProps> = ({
                 type="submit"
                 id="confirm-move-funds-btn"
                 disabled={parsedAmountPaise <= 0 || !fromCategoryId || !toCategoryId || fromCategoryId === toCategoryId}
-                className="flex-1 py-2.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>Confirm Transfer</span>
+                <span>
+                  {fromCategory?.is_unallocated && toCategory
+                    ? `Add Money to ${toCategory.name}`
+                    : 'Confirm Transfer'}
+                </span>
               </button>
             </div>
           </form>
@@ -556,3 +571,5 @@ export const MoveFundsModal: React.FC<MoveFundsModalProps> = ({
     </div>
   );
 };
+
+export const MoveFundsModal = MoveFundsScreen;

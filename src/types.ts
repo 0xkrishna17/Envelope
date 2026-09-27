@@ -4,6 +4,8 @@ export type ReconciliationStatus = 'n/a' | 'pending' | 'partially_reconciled' | 
 
 export type MemberRole = 'owner' | 'member';
 
+export type ActiveTab = 'envelopes' | 'ledger' | 'categories' | 'sync' | 'invite' | 'settings';
+
 export interface Household {
   id: string;
   name: string;

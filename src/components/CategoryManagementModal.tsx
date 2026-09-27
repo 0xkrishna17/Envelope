@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { Category } from '../types';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
@@ -21,6 +21,9 @@ export const CategoryManagement: React.FC = () => {
   const [isCreating, setIsCreating] = useState<boolean>(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+
   const [name, setName] = useState<string>('');
   const [icon, setIcon] = useState<string>('ShoppingBag');
   const [color, setColor] = useState<string>(MUTED_COLOR_PALETTES[0].hex);
@@ -35,6 +38,13 @@ export const CategoryManagement: React.FC = () => {
     setErrorMessage(null);
     setEditingCategory(null);
     setIsCreating(true);
+
+    // Smoothly scroll to the top so the form is immediately visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      nameInputRef.current?.focus();
+    }, 60);
   };
 
   const startEdit = (cat: Category) => {
@@ -45,6 +55,14 @@ export const CategoryManagement: React.FC = () => {
     setErrorMessage(null);
     setEditingCategory(cat);
     setIsCreating(false);
+
+    // Smoothly scroll to top so the edit form is immediately visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    }, 60);
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -99,8 +117,9 @@ export const CategoryManagement: React.FC = () => {
       {/* Create / Edit Form */}
       {(isCreating || editingCategory) && (
         <form
+          ref={formRef}
           onSubmit={handleSave}
-          className="bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F] rounded-2xl p-5 shadow-xs flex flex-col gap-4 animate-in fade-in"
+          className="bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border-2 border-[#4E785E]/50 dark:border-[#4E785E]/60 rounded-2xl p-5 shadow-md flex flex-col gap-4 animate-in fade-in slide-in-from-top-2"
         >
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
@@ -131,6 +150,7 @@ export const CategoryManagement: React.FC = () => {
                 Envelope Name (Unique in household)
               </label>
               <input
+                ref={nameInputRef}
                 type="text"
                 placeholder="e.g. Vacation & Trips, Gadgets..."
                 value={name}
@@ -138,7 +158,7 @@ export const CategoryManagement: React.FC = () => {
                 required
                 disabled={editingCategory?.is_unallocated}
                 id="cat-name-input"
-                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none"
+                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-2 focus:ring-[#4E785E]"
               />
             </div>
 
@@ -243,7 +263,9 @@ export const CategoryManagement: React.FC = () => {
             <div
               key={cat.id}
               className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
-                cat.is_archived
+                editingCategory?.id === cat.id
+                  ? 'bg-[#4E785E]/10 dark:bg-[#4E785E]/15 border-[#4E785E] ring-2 ring-[#4E785E]/30 shadow-xs'
+                  : cat.is_archived
                   ? 'bg-[#EFEAE1]/30 dark:bg-[#28221D]/30 border-dashed border-[#DCD5C9] opacity-70'
                   : 'bg-[#FAF7F2] dark:bg-[#1A1714] border-[#E8E3DA] dark:border-[#2D2823] shadow-xs'
               }`}
@@ -285,10 +307,15 @@ export const CategoryManagement: React.FC = () => {
                   <button
                     onClick={() => startEdit(cat)}
                     id={`edit-cat-${cat.id}`}
-                    className="p-2 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:text-[#1F1B16] transition-colors"
+                    className={`p-2 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                      editingCategory?.id === cat.id
+                        ? 'bg-[#4E785E] text-white border-[#4E785E] shadow-2xs'
+                        : 'border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:text-[#1F1B16] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
+                    }`}
                     title="Edit Envelope"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
+                    {editingCategory?.id === cat.id && <span className="text-[11px]">Editing</span>}
                   </button>
                 )}
 

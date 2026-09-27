@@ -3,11 +3,22 @@ import { useBudget } from '../context/BudgetContext';
 import { PaymentMethod } from '../types';
 import { rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
-import { X, Calendar, MessageSquare, Check, CreditCard, Landmark, Banknote, HelpCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  Calendar,
+  MessageSquare,
+  Check,
+  CreditCard,
+  Landmark,
+  Banknote,
+  HelpCircle,
+  X,
+} from 'lucide-react';
 
 interface LogTransactionModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   preselectedCategoryId?: string;
   initialValues?: {
     amountPaise?: number;
@@ -17,9 +28,10 @@ interface LogTransactionModalProps {
   };
 }
 
-export const LogTransactionModal: React.FC<LogTransactionModalProps> = ({
-  isOpen,
+export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
   preselectedCategoryId,
   initialValues,
 }) => {
@@ -29,6 +41,11 @@ export const LogTransactionModal: React.FC<LogTransactionModalProps> = ({
     transactions,
     addTransaction,
   } = useBudget();
+
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
 
   const [amountStr, setAmountStr] = useState<string>('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
@@ -107,44 +124,42 @@ export const LogTransactionModal: React.FC<LogTransactionModalProps> = ({
       note: note.trim() || undefined,
     });
 
-    onClose();
+    handleBack();
   };
 
   const selectedCategory = activeCategories.find(c => c.id === selectedCategoryId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-md bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-2 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
-              Log Expense
-            </span>
-            <span
-              className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-              style={{
-                backgroundColor: `${activeMember.avatar_color}20`,
-                color: activeMember.avatar_color,
-              }}
-            >
-              by {activeMember.name}
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            id="close-log-tx-modal"
-            className="p-1 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] transition-colors"
+    <div className="w-full max-w-2xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-log-tx-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
+            Log Expense
+          </span>
+          <span
+            className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+            style={{
+              backgroundColor: `${activeMember.avatar_color}20`,
+              color: activeMember.avatar_color,
+            }}
           >
-            <X className="w-5 h-5" />
-          </button>
+            by {activeMember.name}
+          </span>
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4">
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-7 flex flex-col gap-4">
           {/* Amount Input with Large Typographic Field */}
           <div className="relative">
             <div className="flex items-center justify-between mb-1">
@@ -344,3 +359,5 @@ export const LogTransactionModal: React.FC<LogTransactionModalProps> = ({
     </div>
   );
 };
+
+export const LogTransactionModal = LogExpenseScreen;

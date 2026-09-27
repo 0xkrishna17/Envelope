@@ -3,19 +3,25 @@ import { useBudget } from '../context/BudgetContext';
 import { Transaction, PaymentMethod } from '../types';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
-import { X, Trash2, Check, Lock, AlertCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, X, Trash2, Check, Lock, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface EditTransactionModalProps {
   transaction: Transaction | null;
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
 }
 
-export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
+export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
   transaction,
-  isOpen,
+  isOpen = true,
   onClose,
+  onBack,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const {
     activeCategories,
     updateTransaction,
@@ -77,7 +83,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       });
     }
 
-    onClose();
+    handleBack();
   };
 
   const handleDelete = () => {
@@ -87,7 +93,7 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     }
     if (window.confirm('Delete this transaction? The category balance will recompute instantly.')) {
       deleteTransaction(transaction.id);
-      onClose();
+      handleBack();
     }
   };
 
@@ -97,34 +103,33 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     if (!diffPaise) return;
 
     logCorrection(transaction, diffPaise, correctionNote || `Correction for tx #${transaction.id.slice(-4)}`);
-    onClose();
+    handleBack();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-md bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-2 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
-              Edit Entry
-            </span>
-            <span className="text-xs text-[#78716C] ml-2">
-              (Logged by {member?.name || 'Partner'})
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            id="close-edit-tx-modal"
-            className="p-1 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="w-full max-w-2xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-edit-tx-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
+            Edit Entry
+          </span>
+          <span className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            (Logged by {member?.name || 'Partner'})
+          </span>
         </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
 
         {/* Locked warning banner if reconciled (§4.3) */}
         {isLocked && (
@@ -330,3 +335,5 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     </div>
   );
 };
+
+export const EditTransactionModal = EditTransactionScreen;

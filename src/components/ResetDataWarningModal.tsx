@@ -16,16 +16,16 @@ export const ResetDataWarningModal: React.FC<ResetDataWarningModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
-  title = 'Reset All Ledger Data?',
-  description = 'This will permanently revert all envelopes, recorded transactions, salary arrivals, and payback reconciliations back to the initial sample dataset.',
-  confirmText = 'Yes, Reset Everything',
+  title = 'Reset All Ledger Data to ₹0?',
+  description = 'This will permanently reset all envelopes, recorded transactions, salary arrivals, and payback reconciliations to a clean ₹0 state.',
+  confirmText = 'Yes, Reset to ₹0',
   bulletPoints = [
-    'All custom envelopes and target budgets will reset to default',
+    'All envelope balances reset to ₹0 available',
     'All newly logged expenses and correction notes will be removed',
-    'Pending credit card paybacks will return to initial demo balances',
-    'Both local browser storage and cloud database will be reinitialized',
+    'Pending credit card paybacks will reset to ₹0',
+    'Both local browser storage and cloud database will be cleanly reinitialized',
   ],
-  isZeroReset = false,
+  isZeroReset = true,
 }) => {
   const [isResetting, setIsResetting] = useState(false);
   const [isDone, setIsDone] = useState(false);
@@ -127,9 +127,7 @@ export const ResetDataWarningModal: React.FC<ResetDataWarningModalProps> = ({
           </div>
 
           <p className="text-xs text-[#78716C] dark:text-[#A8A29E] italic">
-            {isZeroReset
-              ? 'Your categories and household setup remain preserved so you can immediately begin budgeting your real income.'
-              : 'Tip: You can use this whenever you want to test the workflow fresh or explore demonstration entries.'}
+            Your categories and household setup remain preserved so you can immediately begin budgeting your real income.
           </p>
         </div>
 

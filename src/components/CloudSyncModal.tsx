@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 import { useApiLoading } from '../context/ApiLoadingContext';
-import { CreateHouseholdModal } from './CreateHouseholdModal';
+import { HouseholdAccessManager } from './HouseholdAccessManager';
 import {
   X,
   Cloud,
@@ -17,7 +17,6 @@ import {
   Users,
   Loader2,
   Share2,
-  PlusCircle,
   Eye,
 } from 'lucide-react';
 
@@ -28,7 +27,7 @@ interface CloudSyncModalProps {
 
 export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose }) => {
   const { user, signInWithGoogle, logout, householdId, setHouseholdId, authError } = useAuth();
-  const { cloudSyncStatus, lastCloudSync, syncNow, household, enterPreviewMode } = useBudget();
+  const { cloudSyncStatus, lastCloudSync, syncNow, household } = useBudget();
   const { startApiCall, showToast } = useApiLoading();
   const [customHouseholdId, setCustomHouseholdId] = useState('');
   const [copied, setCopied] = useState(false);
@@ -36,7 +35,6 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSyncingManually, setIsSyncingManually] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isCreateHouseholdOpen, setIsCreateHouseholdOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -108,11 +106,10 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
   const isIframe = window.self !== window.top;
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
-        onClick={onClose}
-      >
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
+      onClick={onClose}
+    >
       <div
         className="w-full max-w-sm sm:max-w-md bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl sm:rounded-3xl p-3.5 sm:p-4.5 shadow-2xl relative text-[#1F1B16] dark:text-[#EDE8E1]"
         onClick={e => e.stopPropagation()}
@@ -125,18 +122,18 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
           <X className="w-4.5 h-4.5" />
         </button>
 
-        <div className="flex items-center gap-2.5 mb-3">
-          <div className="w-8 h-8 rounded-xl bg-[#486B88]/15 text-[#486B88] dark:text-[#A8C4DE] flex items-center justify-center shrink-0">
-            <Cloud className="w-4 h-4" />
-          </div>
-          <div>
+        <div className="mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[#486B88]/15 text-[#486B88] dark:text-[#A8C4DE] flex items-center justify-center shrink-0">
+              <Cloud className="w-4 h-4" />
+            </div>
             <h2 className="text-base font-semibold tracking-tight leading-tight">
               Cloud & Cross-Device Sync
             </h2>
-            <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E]">
-              Powered by Google Firebase Firestore
-            </p>
           </div>
+          <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5 pl-9">
+            Powered by Google Firebase Firestore
+          </p>
         </div>
 
         {/* Sync Status Banner */}
@@ -300,15 +297,20 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
               onClick={handleCopyPublicLink}
               id="copy-partner-link-btn"
               className="px-2.5 py-1.5 rounded-lg bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-[11px] font-semibold flex items-center gap-1 shadow-xs hover:opacity-90 transition-opacity cursor-pointer"
-              title="Copy link for partner (avoids 401 Unauthorized)"
+              title="Copy shareable link for partner"
             >
               {copiedLink ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
               <span>{copiedLink ? 'Copied!' : 'Share Link'}</span>
             </button>
           </div>
           <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] mt-1">
-            Share this ID or link with your partner so both devices mirror this live ledger without 401 errors.
+            Share this ID or link with your partner so both devices mirror this live ledger in real time.
           </p>
+        </div>
+
+        {/* Google Account Allowlist & Permissions */}
+        <div className="mb-3 pt-3 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60">
+          <HouseholdAccessManager compact={true} />
         </div>
 
         {/* Join Other Household Form */}
@@ -334,29 +336,6 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
           </div>
         </form>
 
-        {/* Quick Household Actions */}
-        <div className="flex items-center gap-2 mb-2.5 pt-2 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60">
-          <button
-            type="button"
-            onClick={() => setIsCreateHouseholdOpen(true)}
-            className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-[#4E785E]/10 text-[#4E785E] text-xs font-semibold hover:bg-[#4E785E]/20 transition-colors cursor-pointer"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>New Household</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              enterPreviewMode();
-              onClose();
-            }}
-            className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-medium text-[#78716C] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] transition-colors cursor-pointer"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Preview Mode</span>
-          </button>
-        </div>
-
         {/* Cross Device Instructions */}
         <div className="p-2.5 rounded-xl bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 border border-[#E8E3DA] dark:border-[#2D2823] text-[11px] space-y-1.5 text-[#78716C] dark:text-[#A8A29E]">
           <div className="flex items-start gap-1.5">
@@ -374,13 +353,5 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
         </div>
       </div>
     </div>
-
-    {isCreateHouseholdOpen && (
-      <CreateHouseholdModal
-        isOpen={isCreateHouseholdOpen}
-        onClose={() => setIsCreateHouseholdOpen(false)}
-      />
-    )}
-  </>
   );
 };

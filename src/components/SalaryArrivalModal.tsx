@@ -2,19 +2,25 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise, paiseToRupees } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
-import { X, Check, ArrowRight, UserCheck, Plus, Minus, Landmark } from 'lucide-react';
+import { ArrowLeft, X, Check, ArrowRight, UserCheck, Plus, Minus, Landmark } from 'lucide-react';
 
 interface SalaryArrivalModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   onSuccessOpenChecklist?: () => void;
 }
 
-export const SalaryArrivalModal: React.FC<SalaryArrivalModalProps> = ({
-  isOpen,
+export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
   onSuccessOpenChecklist,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const {
     members,
     activeMember,
@@ -128,7 +134,7 @@ export const SalaryArrivalModal: React.FC<SalaryArrivalModalProps> = ({
     }));
 
     addSalaryAndAllocations(selectedEarnerId, totalSalaryPaise, date, allocList);
-    onClose();
+    handleBack();
     if (onSuccessOpenChecklist) {
       onSuccessOpenChecklist();
     }
@@ -137,32 +143,37 @@ export const SalaryArrivalModal: React.FC<SalaryArrivalModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-lg bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200 max-h-[92vh] flex flex-col"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div>
-            <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-              Salary Arrived & Envelope Allocation
-            </h2>
-            <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-              Allocate into spend envelope accounts (§4.1)
-            </p>
+    <div className="w-full max-w-3xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-salary-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7] flex items-center justify-center shadow-xs">
+            <Landmark className="w-4 h-4" />
           </div>
-          <button
-            onClick={onClose}
-            id="close-salary-modal"
-            className="p-1.5 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            Salary Arrived & Envelope Allocation
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
+        {/* Subtitle Bar */}
+        <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30">
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            Allocate monthly paycheck into spend envelope accounts (§4.1)
+          </p>
         </div>
 
-        <form onSubmit={handleConfirm} className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+        <form onSubmit={handleConfirm} className="p-5 sm:p-7 flex flex-col gap-5">
           {/* Earner Selector (§4.1 step 2) */}
           <div>
             <label className="text-xs font-medium text-[#78716C] dark:text-[#A8A29E] block mb-1.5">
@@ -345,3 +356,5 @@ export const SalaryArrivalModal: React.FC<SalaryArrivalModalProps> = ({
     </div>
   );
 };
+
+export const SalaryArrivalModal = SalaryArrivalScreen;

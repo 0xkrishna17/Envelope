@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Layers,
-  FileText,
-  FolderKanban,
-  Settings,
   RefreshCw,
   ArrowLeftRight,
   Landmark,
@@ -13,7 +9,6 @@ import {
   Menu,
   ChevronRight,
   ShieldCheck,
-  Check,
   Mic,
   BookOpen,
 } from 'lucide-react';
@@ -21,8 +16,6 @@ import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
 
 interface FloatingNavMenuProps {
-  activeTab: 'envelopes' | 'ledger' | 'categories' | 'settings';
-  setActiveTab: (tab: 'envelopes' | 'ledger' | 'categories' | 'settings') => void;
   onOpenLogSpend: () => void;
   onOpenVoiceModal: () => void;
   onOpenReconcileModal: () => void;
@@ -30,12 +23,9 @@ interface FloatingNavMenuProps {
   onOpenSalaryModal: () => void;
   onOpenAddFundsModal: () => void;
   onOpenTour?: () => void;
-  appVersion?: string;
 }
 
 export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
-  activeTab,
-  setActiveTab,
   onOpenLogSpend,
   onOpenVoiceModal,
   onOpenReconcileModal,
@@ -43,7 +33,6 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
   onOpenSalaryModal,
   onOpenAddFundsModal,
   onOpenTour,
-  appVersion,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { totalPendingPaybackPaise } = useBudget();
@@ -72,11 +61,6 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen]);
-
-  const handleSelectTab = (tab: 'envelopes' | 'ledger' | 'categories' | 'settings') => {
-    setActiveTab(tab);
-    setIsOpen(false);
-  };
 
   const handleAction = (actionFn: () => void) => {
     setIsOpen(false);
@@ -171,100 +155,25 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
               </div>
               <span className="text-[10px] text-[#78716C]">Non-salary</span>
             </button>
-          </div>
 
-          {/* Navigation Views Switcher */}
-          <div className="pt-2 border-t border-[#E8E3DA] dark:border-[#2D2823]">
-            <div className="text-[10px] uppercase font-semibold text-[#78716C] dark:text-[#A8A29E] px-1 mb-1.5 tracking-wider">
-              Switch Screen
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
+            {onOpenTour && (
               <button
-                onClick={() => handleSelectTab('envelopes')}
-                id="floating-nav-envelopes"
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                  activeTab === 'envelopes'
-                    ? 'bg-[#EFEAE1] dark:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] font-semibold'
-                    : 'text-[#78716C] dark:text-[#A8A29E] hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714]'
-                }`}
+                onClick={() => handleAction(onOpenTour)}
+                id="floating-action-guide"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#78716C] dark:text-[#A8A29E] text-xs font-medium transition-colors cursor-pointer"
               >
-                <div className="flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-[#4E785E]" />
-                  <span>Envelopes</span>
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-3.5 h-3.5 text-[#B85D43]" />
+                  <span>Interactive Guide & Rules</span>
                 </div>
-                {activeTab === 'envelopes' && <Check className="w-3 h-3 text-[#4E785E]" />}
+                <ChevronRight className="w-3.5 h-3.5 text-[#78716C]" />
               </button>
-
-              <button
-                onClick={() => handleSelectTab('ledger')}
-                id="floating-nav-ledger"
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                  activeTab === 'ledger'
-                    ? 'bg-[#EFEAE1] dark:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] font-semibold'
-                    : 'text-[#78716C] dark:text-[#A8A29E] hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714]'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-[#486B88]" />
-                  <span>Ledger</span>
-                </div>
-                {activeTab === 'ledger' && <Check className="w-3 h-3 text-[#486B88]" />}
-              </button>
-
-              <button
-                onClick={() => handleSelectTab('categories')}
-                id="floating-nav-categories"
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                  activeTab === 'categories'
-                    ? 'bg-[#EFEAE1] dark:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] font-semibold'
-                    : 'text-[#78716C] dark:text-[#A8A29E] hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714]'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <FolderKanban className="w-3.5 h-3.5 text-[#AF7832]" />
-                  <span>Manage</span>
-                </div>
-                {activeTab === 'categories' && <Check className="w-3 h-3 text-[#AF7832]" />}
-              </button>
-
-              <button
-                onClick={() => handleSelectTab('settings')}
-                id="floating-nav-settings"
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                  activeTab === 'settings'
-                    ? 'bg-[#EFEAE1] dark:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] font-semibold'
-                    : 'text-[#78716C] dark:text-[#A8A29E] hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714]'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <Settings className="w-3.5 h-3.5 text-[#78716C]" />
-                  <span>Settings</span>
-                </div>
-                {activeTab === 'settings' && <Check className="w-3 h-3 text-[#78716C]" />}
-              </button>
-
-              {onOpenTour && (
-                <button
-                  onClick={() => {
-                    setIsOpen(false);
-                    onOpenTour();
-                  }}
-                  id="floating-nav-guide"
-                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-[#78716C] dark:text-[#A8A29E] hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714] transition-colors mt-0.5 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60 pt-1.5 cursor-pointer"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <BookOpen className="w-3.5 h-3.5 text-[#B85D43]" />
-                    <span>Guide & Concepts</span>
-                  </div>
-                  <ChevronRight className="w-3 h-3 text-[#78716C]" />
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* Floating Trigger Buttons: Dedicated Speak Button (The only Speak module in the app) + Menu FAB */}
+      {/* Floating Trigger Buttons: Dedicated Speak Button + Menu FAB */}
       <div className="flex items-center gap-2">
         <button
           onClick={onOpenVoiceModal}
@@ -291,16 +200,6 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
           {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
       </div>
-
-      {/* App Version at bottom right in small text */}
-      {appVersion && (
-        <span
-          id="app-version-bottom-right"
-          className="text-[10px] text-[#78716C]/70 dark:text-[#A8A29E]/70 font-mono select-none pointer-events-none mt-1 mr-1"
-        >
-          {appVersion}
-        </span>
-      )}
     </div>
   );
 };

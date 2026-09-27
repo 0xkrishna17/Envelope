@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
+  ArrowLeft,
   X,
   Camera,
   Upload,
@@ -15,8 +16,9 @@ import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
 
 interface ProfileModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   isOnboarding?: boolean;
 }
 
@@ -30,11 +32,16 @@ const PRESET_COLORS = [
   '#7A5F48', // Mocha
 ];
 
-export const ProfileModal: React.FC<ProfileModalProps> = ({
-  isOpen,
+export const ProfileScreen: React.FC<ProfileModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
   isOnboarding = false,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const { members, activeMember, updateMemberProfile, setActiveMemberId, householdId } = useBudget();
   const { user } = useAuth();
 
@@ -119,7 +126,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     localStorage.setItem('env_budget_user_name', finalName);
     setSavedSuccess(true);
     setTimeout(() => {
-      onClose();
+      handleBack();
     }, 450);
   };
 
@@ -129,41 +136,43 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
     setTimeout(() => setCopiedHh(false), 2000);
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm sm:max-w-md bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-2xl relative text-[#1F1B16] dark:text-[#EDE8E1]"
-        onClick={e => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-3.5 right-3.5 p-1.5 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] rounded-full transition-colors cursor-pointer"
-          title="Close"
-        >
-          <X className="w-4.5 h-4.5" />
-        </button>
+  if (!isOpen) return null;
 
-        {/* Modal Header */}
-        <div className="flex items-center gap-2.5 mb-3.5">
-          <div className="w-8 h-8 rounded-xl bg-[#4E785E]/15 text-[#4E785E] flex items-center justify-center shrink-0">
+  return (
+    <div className="w-full max-w-2xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-profile-screen-btn"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#4E785E]/15 text-[#4E785E] flex items-center justify-center shrink-0">
             <User className="w-4 h-4" />
           </div>
-          <div>
-            <h2 className="text-base font-semibold tracking-tight leading-tight">
-              {isOnboarding ? 'Welcome! Set Up Your Profile' : 'My Profile & Photo'}
-            </h2>
-            <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E]">
-              {isOnboarding
-                ? 'Tell us your name and optionally add a photo for your household'
-                : 'Custom name, profile photo, and avatar color'}
-            </p>
-          </div>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            {isOnboarding ? 'Set Up Your Profile' : 'Profile & Member Details'}
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl shadow-xs overflow-hidden text-[#1F1B16] dark:text-[#EDE8E1]">
+        {/* Subtitle Bar */}
+        <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30">
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            {isOnboarding
+              ? 'Tell your household members what name and color to show when you log spending'
+              : 'Customize your avatar, display name, and household identification'}
+          </p>
         </div>
 
-        <form onSubmit={handleSave} className="space-y-3.5">
+        <div className="p-5 sm:p-7">
+          <form onSubmit={handleSave} className="space-y-4 text-xs">
           {/* Photo / Avatar Section */}
           <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823]">
             <div className="relative shrink-0">
@@ -348,7 +357,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <div className="flex items-center gap-2 pt-1">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleBack}
               className="flex-1 py-2 px-3 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-medium hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] transition-colors cursor-pointer"
             >
               Cancel
@@ -369,7 +378,11 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
 };
+
+export const ProfileModal = ProfileScreen;
+

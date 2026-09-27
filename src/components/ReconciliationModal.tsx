@@ -5,19 +5,25 @@ import { renderCategoryIcon } from '../utils/categoryTheme';
 import {
   calculateCategoryPendingDebt,
 } from '../utils/budgetLogic';
-import { X, Check, ArrowRight, RefreshCw, AlertCircle, History, Trash2 } from 'lucide-react';
+import { ArrowLeft, X, Check, ArrowRight, RefreshCw, AlertCircle, History, Trash2 } from 'lucide-react';
 
 interface ReconciliationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   preselectedCategoryId?: string;
 }
 
-export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
-  isOpen,
+export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
   preselectedCategoryId,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const {
     activeCategories,
     transactions,
@@ -90,55 +96,62 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
       setJustSettled(false);
       // Check if all settled
       if (categoriesWithDebt.length <= 1) {
-        onClose();
+        handleBack();
       }
     }, 1200);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-lg bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200 max-h-[90vh] flex flex-col"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div>
-            <div className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 text-[#B85D43]" />
-              <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-                Credit Card Payback (Spend → Salary)
-              </h2>
-            </div>
-            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-0.5">
-              Pay yourself back from envelopes for card spend (§4.4)
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            id="close-reconcile-modal"
-            className="p-1.5 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+  if (!isOpen) return null;
 
-        {/* View Switcher: Payback vs Recent Reconciliations */}
-        <div className="px-5 pt-3 flex items-center justify-between">
-          <span className="text-xs text-[#78716C]">
-            Total card spend to pay back:{' '}
+  return (
+    <div className="w-full max-w-4xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-reconcile-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] flex items-center justify-center shadow-xs">
+            <RefreshCw className="w-4 h-4" />
+          </div>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            Credit Card Payback (Spend → Salary)
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden flex flex-col">
+        {/* Header Bar */}
+        <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            Transfer envelope money back to your Primary Salary bank account to cover credit card bills (§4.4)
+          </p>
+          <span className="text-xs text-[#78716C] dark:text-[#A8A29E] shrink-0">
+            Total Pending:{' '}
             <strong className="text-[#87341D] dark:text-[#F3B3A2] font-amount font-semibold">
               {formatPaise(totalOwedAll)}
             </strong>
           </span>
+        </div>
+
+        {/* View Switcher: Payback vs Recent Reconciliations */}
+        <div className="px-5 pt-3.5 pb-1 flex items-center justify-between">
+          <span className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            {showHistory ? 'Payback Transfer History' : 'Pending Envelope Debts'}
+          </span>
           <button
             type="button"
             onClick={() => setShowHistory(!showHistory)}
-            className="text-xs text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] flex items-center gap-1"
+            className="text-xs text-[#486B88] hover:underline flex items-center gap-1 font-medium cursor-pointer"
           >
             <History className="w-3.5 h-3.5" />
-            <span>{showHistory ? 'Back to Payback' : 'Past Transfers'}</span>
+            <span>{showHistory ? '← Back to Active Payback' : 'View Past Payback Log'}</span>
           </button>
         </div>
 
@@ -388,3 +401,5 @@ export const ReconciliationModal: React.FC<ReconciliationModalProps> = ({
     </div>
   );
 };
+
+export const ReconciliationModal = ReconcileScreen;

@@ -67,15 +67,19 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
           </div>
         </div>
 
-        {/* Quick Spend Button */}
+        {/* Quick Action Button: Allocate/Add money for unallocated surplus, Spend for regular envelopes */}
         <button
           type="button"
           onClick={e => {
             e.stopPropagation();
-            onQuickAddSpend(category.id);
+            if (category.is_unallocated && onOpenMoveFunds) {
+              onOpenMoveFunds(category.id);
+            } else {
+              onQuickAddSpend(category.id);
+            }
           }}
           id={`quick-spend-cat-${category.id}`}
-          title="Quick log spend for this envelope"
+          title={category.is_unallocated ? 'Add money from surplus to an envelope' : 'Quick log spend for this envelope'}
           className="p-1 sm:p-1.5 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] transition-colors shrink-0"
         >
           <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />

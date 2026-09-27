@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import {
+  ArrowLeft,
   X,
   PlusCircle,
   Check,
@@ -17,16 +18,19 @@ import {
   Building2,
   HelpCircle,
   User,
+  Layers,
 } from 'lucide-react';
 
 interface AddCategoryFundsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   initialCategoryId?: string;
   initialAmountRupees?: number;
 }
 
 const TOPUP_SOURCES = [
+  { id: 'Unallocated Surplus', label: 'Unallocated Surplus', icon: Layers, color: '#486B88' },
   { id: 'Gift / Family', label: 'Gift / Family', icon: Gift, color: '#B85D43' },
   { id: 'Reimbursement', label: 'Reimbursement', icon: Briefcase, color: '#486B88' },
   { id: 'Bonus / Extra', label: 'Bonus / Extra', icon: TrendingUp, color: '#2C523B' },
@@ -35,24 +39,40 @@ const TOPUP_SOURCES = [
   { id: 'Manual Top-Up', label: 'Other Top-Up', icon: PlusCircle, color: '#78716C' },
 ];
 
-export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
-  isOpen,
+export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
   initialCategoryId,
   initialAmountRupees,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const {
     categories,
     categoryBalances,
     members,
     activeMember,
     addCategoryFunds,
+    moveEnvelopeFunds,
   } = useBudget();
 
   // Active envelopes excluding archived and deleted
   const activeEnvelopes = useMemo(() => {
     return categories.filter(c => !c.deleted_at && !c.is_archived);
   }, [categories]);
+
+  const unallocatedCat = useMemo(() => {
+    return categories.find(c => c.is_unallocated);
+  }, [categories]);
+
+  const unallocatedBalance = useMemo(() => {
+    if (!unallocatedCat) return 0;
+    const b = categoryBalances.find(info => info.category.id === unallocatedCat.id);
+    return b ? b.availableNow : 0;
+  }, [categoryBalances, unallocatedCat]);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [amountRupees, setAmountRupees] = useState<string>('');
@@ -69,19 +89,24 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
       const today = new Date().toISOString().split('T')[0];
       setDate(today);
 
-      const targetCatId = initialCategoryId && activeEnvelopes.some(c => c.id === initialCategoryId)
-        ? initialCategoryId
-        : (activeEnvelopes[0]?.id || '');
+      const isInitUnallocated = initialCategoryId && unallocatedCat && initialCategoryId === unallocatedCat.id;
+
+      // If initial was unallocated envelope, user wants to add money FROM surplus into an envelope!
+      const targetCatId = isInitUnallocated
+        ? (activeEnvelopes.find(c => !c.is_unallocated)?.id || activeEnvelopes[0]?.id || '')
+        : (initialCategoryId && activeEnvelopes.some(c => c.id === initialCategoryId)
+            ? initialCategoryId
+            : (activeEnvelopes[0]?.id || ''));
       setSelectedCategoryId(targetCatId);
 
       setAmountRupees(initialAmountRupees ? String(initialAmountRupees) : '');
-      setSelectedSource('Gift / Family');
+      setSelectedSource(isInitUnallocated ? 'Unallocated Surplus' : 'Gift / Family');
       setDepositHolding('secondary_account');
       setNote('');
       setLoggedByUserId(activeMember?.user_id || members[0]?.user_id || '');
       setErrorMessage(null);
     }
-  }, [isOpen, initialCategoryId, initialAmountRupees, activeEnvelopes, activeMember, members]);
+  }, [isOpen, initialCategoryId, initialAmountRupees, activeEnvelopes, activeMember, members, unallocatedCat]);
 
   const selectedCategory = useMemo(() => {
     return categories.find(c => c.id === selectedCategoryId);
@@ -119,6 +144,37 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
       return;
     }
 
+    if (selectedSource === 'Unallocated Surplus') {
+      if (!unallocatedCat) {
+        setErrorMessage('Unallocated Surplus envelope not found.');
+        return;
+      }
+      if (selectedCategoryId === unallocatedCat.id) {
+        setErrorMessage('Please select a different envelope to receive money from Surplus.');
+        return;
+      }
+      if (parsedAmountPaise > unallocatedBalance) {
+        setErrorMessage(`Insufficient surplus funds. Only ${formatPaise(unallocatedBalance)} available in Unallocated Surplus.`);
+        return;
+      }
+
+      const res = moveEnvelopeFunds({
+        fromCategoryId: unallocatedCat.id,
+        toCategoryId: selectedCategoryId,
+        amountPaise: parsedAmountPaise,
+        date,
+        note: note.trim() || 'Funded from Unallocated Surplus',
+      });
+
+      if (!res.success) {
+        setErrorMessage(res.error || 'Failed to allocate funds from surplus.');
+        return;
+      }
+
+      handleBack();
+      return;
+    }
+
     const res = addCategoryFunds({
       categoryId: selectedCategoryId,
       amountPaise: parsedAmountPaise,
@@ -135,45 +191,44 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
       return;
     }
 
-    onClose();
+    handleBack();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-lg bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200 max-h-[92vh] flex flex-col"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-funds-modal-title"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#2C523B]/10 dark:bg-[#2C523B]/30 text-[#2C523B] dark:text-[#A8D1B7] flex items-center justify-center shrink-0">
-              <PlusCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 id="add-funds-modal-title" className="text-base font-bold text-[#1F1B16] dark:text-[#EDE8E1]">
-                Add Money to Envelope
-              </h3>
-              <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E]">
-                Direct funding without going through monthly salary flow
-              </p>
-            </div>
+    <div className="w-full max-w-3xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-add-funds-modal-btn"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#2C523B]/10 dark:bg-[#2C523B]/30 text-[#2C523B] dark:text-[#A8D1B7] flex items-center justify-center shrink-0">
+            <PlusCircle className="w-4 h-4" />
           </div>
-          <button
-            onClick={onClose}
-            id="close-add-funds-modal-btn"
-            className="p-1.5 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            Add Money to Envelope
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
+        {/* Subtitle Bar */}
+        <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30">
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            Direct funding from gifts, reimbursements, bonus, or savings without waiting for monthly salary
+          </p>
         </div>
 
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="overflow-y-auto p-5 flex flex-col gap-4 flex-1 text-xs">
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-5 sm:p-7 flex flex-col gap-5 text-xs">
           {errorMessage && (
             <div className="p-3 rounded-xl bg-[#FDF2F0] dark:bg-[#2C1814] border border-[#E8C5BC] dark:border-[#5E261B] text-[#B85D43] dark:text-[#F3B3A2] text-xs">
               {errorMessage}
@@ -278,7 +333,7 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
             <label className="block font-semibold text-[#1F1B16] dark:text-[#EDE8E1] mb-1.5">
               Funding Source
             </label>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {TOPUP_SOURCES.map(src => {
                 const IconComponent = src.icon;
                 const isSelected = selectedSource === src.id;
@@ -286,8 +341,11 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
                   <button
                     key={src.id}
                     type="button"
-                    onClick={() => setSelectedSource(src.id)}
-                    className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border text-left transition-all ${
+                    onClick={() => {
+                      setSelectedSource(src.id);
+                      setErrorMessage(null);
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-2 rounded-xl border text-left transition-all cursor-pointer ${
                       isSelected
                         ? 'border-[#2C523B] bg-[#2C523B]/10 dark:bg-[#2C523B]/20 text-[#1F1B16] dark:text-[#EDE8E1] font-semibold ring-1 ring-[#2C523B]'
                         : 'border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#201C18] text-[#78716C] dark:text-[#A8A29E] hover:border-[#DCD5C9]'
@@ -299,69 +357,81 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
                 );
               })}
             </div>
+
+            {selectedSource === 'Unallocated Surplus' && (
+              <div className="mt-2.5 p-2.5 rounded-xl bg-[#486B88]/10 border border-[#486B88]/25 text-xs flex items-center justify-between text-[#1F1B16] dark:text-[#EDE8E1]">
+                <span className="text-[11px] text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1">
+                  <Layers className="w-3.5 h-3.5 text-[#486B88]" />
+                  Available in Unallocated Surplus:
+                </span>
+                <strong className="font-amount font-semibold text-[#486B88]">{formatPaise(unallocatedBalance)}</strong>
+              </div>
+            )}
           </div>
 
-          {/* 4. Deposit Location / Holding Account */}
-          <div>
-            <label className="block font-semibold text-[#1F1B16] dark:text-[#EDE8E1] mb-1.5">
-              Where is the money held?
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setDepositHolding('secondary_account')}
-                className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
-                  depositHolding === 'secondary_account'
-                    ? 'border-[#2C523B] bg-[#2C523B]/10 dark:bg-[#2C523B]/20 text-[#1F1B16] dark:text-[#EDE8E1] ring-1 ring-[#2C523B]'
-                    : 'border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#201C18] text-[#78716C] dark:text-[#A8A29E] hover:border-[#DCD5C9]'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 font-semibold text-[11px] text-[#1F1B16] dark:text-[#EDE8E1]">
-                  <Wallet className="w-3.5 h-3.5 text-[#2C523B]" />
-                  <span>Spend Account / UPI</span>
-                </div>
-                <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] mt-1 leading-tight">
-                  Available in envelope immediately
-                </p>
-              </button>
+          {/* 4. Deposit Location / Holding Account (only needed for external sources) */}
+          {selectedSource !== 'Unallocated Surplus' && (
+            <div>
+              <label className="block font-semibold text-[#1F1B16] dark:text-[#EDE8E1] mb-1.5">
+                Where is the money held?
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDepositHolding('secondary_account')}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                    depositHolding === 'secondary_account'
+                      ? 'border-[#2C523B] bg-[#2C523B]/10 dark:bg-[#2C523B]/20 text-[#1F1B16] dark:text-[#EDE8E1] ring-1 ring-[#2C523B]'
+                      : 'border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#201C18] text-[#78716C] dark:text-[#A8A29E] hover:border-[#DCD5C9]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-[11px] text-[#1F1B16] dark:text-[#EDE8E1]">
+                    <Wallet className="w-3.5 h-3.5 text-[#2C523B]" />
+                    <span>Spend Account / UPI</span>
+                  </div>
+                  <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] mt-1 leading-tight">
+                    Available in envelope immediately
+                  </p>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setDepositHolding('cash')}
-                className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
-                  depositHolding === 'cash'
-                    ? 'border-[#2C523B] bg-[#2C523B]/10 dark:bg-[#2C523B]/20 text-[#1F1B16] dark:text-[#EDE8E1] ring-1 ring-[#2C523B]'
-                    : 'border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#201C18] text-[#78716C] dark:text-[#A8A29E] hover:border-[#DCD5C9]'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 font-semibold text-[11px] text-[#1F1B16] dark:text-[#EDE8E1]">
-                  <Banknote className="w-3.5 h-3.5 text-[#AF7832]" />
-                  <span>Cash on Hand</span>
-                </div>
-                <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] mt-1 leading-tight">
-                  Physical cash envelope; available now
-                </p>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setDepositHolding('cash')}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                    depositHolding === 'cash'
+                      ? 'border-[#2C523B] bg-[#2C523B]/10 dark:bg-[#2C523B]/20 text-[#1F1B16] dark:text-[#EDE8E1] ring-1 ring-[#2C523B]'
+                      : 'border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#201C18] text-[#78716C] dark:text-[#A8A29E] hover:border-[#DCD5C9]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-[11px] text-[#1F1B16] dark:text-[#EDE8E1]">
+                    <Banknote className="w-3.5 h-3.5 text-[#AF7832]" />
+                    <span>Cash on Hand</span>
+                  </div>
+                  <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] mt-1 leading-tight">
+                    Physical cash envelope; available now
+                  </p>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setDepositHolding('primary_account')}
-                className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
-                  depositHolding === 'primary_account'
-                    ? 'border-[#2C523B] bg-[#2C523B]/10 dark:bg-[#2C523B]/20 text-[#1F1B16] dark:text-[#EDE8E1] ring-1 ring-[#2C523B]'
-                    : 'border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#201C18] text-[#78716C] dark:text-[#A8A29E] hover:border-[#DCD5C9]'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 font-semibold text-[11px] text-[#1F1B16] dark:text-[#EDE8E1]">
-                  <Building2 className="w-3.5 h-3.5 text-[#486B88]" />
-                  <span>Primary Salary A/c</span>
-                </div>
-                <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] mt-1 leading-tight">
-                  Adds to Bank Transfer Checklist
-                </p>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setDepositHolding('primary_account')}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col justify-between transition-all cursor-pointer ${
+                    depositHolding === 'primary_account'
+                      ? 'border-[#2C523B] bg-[#2C523B]/10 dark:bg-[#2C523B]/20 text-[#1F1B16] dark:text-[#EDE8E1] ring-1 ring-[#2C523B]'
+                      : 'border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#201C18] text-[#78716C] dark:text-[#A8A29E] hover:border-[#DCD5C9]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-[11px] text-[#1F1B16] dark:text-[#EDE8E1]">
+                    <Building2 className="w-3.5 h-3.5 text-[#486B88]" />
+                    <span>Primary Salary A/c</span>
+                  </div>
+                  <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] mt-1 leading-tight">
+                    Adds to Bank Transfer Checklist
+                  </p>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 5. Date & Logged By Member */}
           <div className="grid grid-cols-2 gap-3">
@@ -440,9 +510,9 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
           <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#E8E3DA] dark:border-[#2D2823]">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleBack}
               id="cancel-add-funds-btn"
-              className="px-4 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] dark:text-[#A8A29E] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] font-medium text-xs transition-colors"
+              className="px-4 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] dark:text-[#A8A29E] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] font-medium text-xs transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -450,7 +520,7 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
               type="submit"
               id="confirm-add-funds-btn"
               disabled={parsedAmountPaise <= 0 || !selectedCategoryId}
-              className="px-5 py-2.5 rounded-xl bg-[#2C523B] hover:bg-[#23422F] text-white font-semibold text-xs shadow-xs disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+              className="px-5 py-2.5 rounded-xl bg-[#2C523B] hover:bg-[#23422F] text-white font-semibold text-xs shadow-xs disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>
@@ -463,3 +533,6 @@ export const AddCategoryFundsModal: React.FC<AddCategoryFundsModalProps> = ({
     </div>
   );
 };
+
+export const AddCategoryFundsModal = AddFundsScreen;
+

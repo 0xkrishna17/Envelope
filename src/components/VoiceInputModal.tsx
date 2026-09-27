@@ -18,11 +18,13 @@ import {
   CheckCircle2,
   Zap,
   ShieldCheck,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface VoiceInputModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  onBack?: () => void;
   onCommitAddTransaction: (params: {
     amountPaise: number;
     categoryId: string;
@@ -34,14 +36,19 @@ interface VoiceInputModalProps {
   onOpenMoveFundsFlow?: (fromCatId?: string, toCatId?: string, amountPaise?: number) => void;
 }
 
-export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
-  isOpen,
+export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
+  isOpen = true,
   onClose,
+  onBack,
   onCommitAddTransaction,
   onOpenSalaryFlow,
   onOpenReconcileFlow,
   onOpenMoveFundsFlow,
 }) => {
+  const handleBack = () => {
+    if (onBack) onBack();
+    else if (onClose) onClose();
+  };
   const { activeCategories, activeMember } = useBudget();
   const { startApiCall } = useApiLoading();
 
@@ -55,8 +62,9 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
   const [isFallbackUsed, setIsFallbackUsed] = useState<boolean>(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Web Speech API
+  // Web Speech API - initialized lazily on explicit user tap
   const [recognition, setRecognition] = useState<any>(null);
+  const recognitionRef = useRef<any>(null);
   const transcriptRef = useRef<string>('');
   const parseRef = useRef<(text: string) => void>(() => {});
   const isLoadingRef = useRef<boolean>(false);
@@ -70,7 +78,23 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
     isLoadingRef.current = isLoading;
   }, [isLoading]);
 
+  // Clean up speech recognition on unmount
   useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      if (autoParseTimerRef.current) {
+        clearTimeout(autoParseTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Lazy recognition constructor - NEVER invoked on page load; only when user taps the mic
+  const getOrCreateRecognition = useCallback(() => {
+    if (recognitionRef.current) return recognitionRef.current;
     if (typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       const recog = new SpeechRecognition();
@@ -109,21 +133,26 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
       };
 
       recog.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
+        console.warn('Speech recognition notice/error:', event.error);
         setIsListening(false);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          setErrorMessage('Microphone access was denied. Please allow microphone permissions in your browser or type your expense below.');
+        }
       };
 
       recog.onend = () => {
         setIsListening(false);
-        // Automatically parse transcript if speech finished and not already loading
         const textToParse = transcriptRef.current.trim();
         if (textToParse && !isLoadingRef.current) {
           parseRef.current(textToParse);
         }
       };
 
+      recognitionRef.current = recog;
       setRecognition(recog);
+      return recog;
     }
+    return null;
   }, []);
 
   const handleParseWithGemini = useCallback(async (textToParse: string) => {
@@ -198,58 +227,54 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
   }, [handleParseWithGemini]);
 
   useEffect(() => {
-    let autoListenTimer: any;
     if (isOpen) {
       setTranscript('');
       setParsedResult(null);
       setErrorMessage(null);
       setIsLoading(false);
-
-      // Auto-start listening as requested: "we should start auto listening when voice modal opens up"
-      autoListenTimer = setTimeout(() => {
-        if (recognition) {
-          try {
-            recognition.start();
-            setIsListening(true);
-          } catch (err) {
-            // Already started or waiting for user interaction/permission
-            console.log('Auto speech recognition start notice:', err);
-          }
-        }
-      }, 250);
+      setIsListening(false);
     } else {
-      if (recognition) {
+      if (recognitionRef.current) {
         try {
-          recognition.stop();
+          recognitionRef.current.stop();
         } catch {}
       }
       setIsListening(false);
     }
-
-    return () => {
-      if (autoListenTimer) clearTimeout(autoListenTimer);
-    };
-  }, [isOpen, recognition]);
+  }, [isOpen]);
 
   const toggleListening = () => {
-    if (!recognition) {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const recog = getOrCreateRecognition();
+    if (!recog) {
       alert('Speech recognition is not supported in this browser. You can type your request directly.');
       return;
     }
 
-    if (isListening) {
-      recognition.stop();
-      setIsListening(false);
-    } else {
-      setTranscript('');
-      setParsedResult(null);
-      setErrorMessage(null);
-      try {
-        recognition.start();
-        setIsListening(true);
-      } catch (err) {
-        console.error(err);
+    setTranscript('');
+    setParsedResult(null);
+    setErrorMessage(null);
+    try {
+      recog.start();
+      setIsListening(true);
+    } catch (err: any) {
+      console.warn('Speech recognition start note:', err);
+      // If already started or interrupted
+      if (err.name === 'InvalidStateError') {
+        try {
+          recog.stop();
+        } catch {}
       }
+      setIsListening(false);
     }
   };
 
@@ -282,12 +307,12 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
         paymentMethod: parsedResult.paymentMethod || 'credit_card',
         note: parsedResult.note || transcript,
       });
-      onClose();
+      handleBack();
     } else if (parsedResult.intent === 'mark_salary_arrived') {
-      onClose();
+      handleBack();
       onOpenSalaryFlow();
     } else if (parsedResult.intent === 'mark_reconciled') {
-      onClose();
+      handleBack();
       onOpenReconcileFlow();
     } else if (parsedResult.intent === 'move_funds') {
       const fromCat = activeCategories.find(c =>
@@ -297,13 +322,13 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
         c.name.toLowerCase().includes((parsedResult.toCategoryName || '').toLowerCase())
       );
 
-      onClose();
+      handleBack();
       if (onOpenMoveFundsFlow) {
         onOpenMoveFundsFlow(fromCat?.id, toCat?.id, parsedResult.amountInPaise);
       }
     } else {
       // Query balance or other
-      onClose();
+      handleBack();
     }
   };
 
@@ -318,30 +343,37 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-xs p-0 sm:p-4">
-      <div
-        className="w-full sm:max-w-md bg-[#FAF7F2] dark:bg-[#1A1714] rounded-t-2xl sm:rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xl overflow-hidden animate-in slide-in-from-bottom duration-200"
-        role="dialog"
-        aria-modal="true"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#B85D43]" />
-            <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1] leading-tight">
-              Voice Assistant
-            </h2>
+    <div className="w-full max-w-2xl mx-auto pb-24 animate-in fade-in duration-200">
+      {/* Screen Navigation Header */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <button
+          type="button"
+          onClick={handleBack}
+          id="close-voice-modal"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+        >
+          <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          <span>Back</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-[#B85D43]/20 text-[#B85D43] flex items-center justify-center shadow-xs">
+            <Sparkles className="w-4 h-4" />
           </div>
-          <button
-            onClick={onClose}
-            id="close-voice-modal"
-            className="p-1.5 rounded-full text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+            Voice Assistant
+          </h2>
+        </div>
+      </div>
+
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
+        {/* Subtitle Bar */}
+        <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30">
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+            Speak naturally to log spend, move funds, or settle credit card debt with AI intent extraction
+          </p>
         </div>
 
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 sm:p-7 flex flex-col gap-5">
           {/* Mic Action Area */}
           <div className="flex flex-col items-center justify-center py-4 bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823]">
             <button
@@ -658,3 +690,5 @@ export const VoiceInputModal: React.FC<VoiceInputModalProps> = ({
     </div>
   );
 };
+
+export const VoiceInputModal = VoiceInputScreen;

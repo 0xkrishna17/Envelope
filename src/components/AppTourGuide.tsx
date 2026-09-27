@@ -14,6 +14,7 @@ import {
   RotateCcw,
   ArrowRight,
 } from 'lucide-react';
+import { ActiveTab } from '../types';
 
 export interface TourCardInfo {
   id: string;
@@ -166,8 +167,8 @@ export const TOUR_CARDS: TourCardInfo[] = [
 interface AppTourGuideProps {
   isOpen: boolean;
   onClose: () => void;
-  activeTab?: 'envelopes' | 'ledger' | 'categories' | 'settings';
-  setActiveTab?: (tab: 'envelopes' | 'ledger' | 'categories' | 'settings') => void;
+  activeTab?: ActiveTab;
+  setActiveTab?: (tab: ActiveTab) => void;
   isFirstTime?: boolean;
   onCompleteFirstTime?: () => Promise<void> | void;
 }
@@ -353,7 +354,7 @@ export const AppTourGuide: React.FC<AppTourGuideProps> = ({
             <div className="flex items-start gap-2.5 text-xs text-[#B85D43] font-medium bg-[#B85D43]/10 dark:bg-[#B85D43]/20 p-3 rounded-xl border border-[#B85D43]/20">
               <RotateCcw className="w-4 h-4 shrink-0 text-[#B85D43] mt-0.5" />
               <div>
-                <strong className="font-bold">First-Time Setup:</strong> Finishing or closing this guide resets the mock demonstration balances to ₹0 so you can start cleanly with your real household income.
+                <strong className="font-bold">First-Time Setup:</strong> You're all set to begin allocating your income, tracking envelope spending, and managing credit card paybacks cleanly.
               </div>
             </div>
           ) : card.tip ? (

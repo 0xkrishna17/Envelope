@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
-import { CreateHouseholdModal } from './CreateHouseholdModal';
-import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen, PlusCircle } from 'lucide-react';
+import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen } from 'lucide-react';
 import { ResetDataWarningModal } from './ResetDataWarningModal';
 
 interface SettingsTabProps {
@@ -24,14 +23,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onOpenTour,
 }) => {
   const { user, householdId } = useAuth();
-  const [resetModalMode, setResetModalMode] = useState<'sample' | 'zero' | null>(null);
-  const [isCreateHhOpen, setIsCreateHhOpen] = useState(false);
+  const [isResetZeroModalOpen, setIsResetZeroModalOpen] = useState(false);
   const {
     household,
     members,
     activeMember,
     pushSettings,
-    resetToSampleData,
     resetLedgerToZero,
     cloudSyncStatus,
     lastCloudSync,
@@ -72,14 +69,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setIsCreateHhOpen(true)}
-              id="settings-new-household-btn"
-              className="px-3 py-1.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer text-[#4E785E]"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>New Household</span>
-            </button>
             <button
               onClick={onOpenProfileModal}
               id="settings-edit-profile-btn"
@@ -146,35 +135,33 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         <div
           onClick={onOpenCloudSyncModal}
           id="card-cloud-sync-setting"
-          className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 cursor-pointer hover:border-[#D0C7B9] transition-all shadow-xs flex items-start gap-3 col-span-1 sm:col-span-2"
+          className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 cursor-pointer hover:border-[#D0C7B9] transition-all shadow-xs col-span-1 sm:col-span-2"
         >
-          <div className="w-8 h-8 rounded-xl bg-[#486B88]/20 text-[#486B88] dark:text-[#A8C4DE] flex items-center justify-center shrink-0">
-            <Cloud className="w-4 h-4" />
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-[#486B88]/20 text-[#486B88] dark:text-[#A8C4DE] flex items-center justify-center shrink-0">
+                <Cloud className="w-3.5 h-3.5" />
+              </div>
+              <span>Cloud & Cross-Device Sync (Firebase Firestore)</span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  cloudSyncStatus === 'synced'
+                    ? 'bg-[#4E785E]'
+                    : cloudSyncStatus === 'syncing'
+                    ? 'bg-[#486B88] animate-ping'
+                    : 'bg-[#AF7832]'
+                }`}
+              />
+            </h3>
+            <span className="text-[11px] font-semibold text-[#486B88] hover:underline shrink-0">
+              {user ? 'Manage Sync →' : 'Connect Account →'}
+            </span>
           </div>
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-1.5">
-                <span>Cloud & Cross-Device Sync (Firebase Firestore)</span>
-                <span
-                  className={`w-2 h-2 rounded-full ${
-                    cloudSyncStatus === 'synced'
-                      ? 'bg-[#4E785E]'
-                      : cloudSyncStatus === 'syncing'
-                      ? 'bg-[#486B88] animate-ping'
-                      : 'bg-[#AF7832]'
-                  }`}
-                />
-              </h3>
-              <span className="text-[11px] font-semibold text-[#486B88] hover:underline">
-                {user ? 'Manage Sync →' : 'Connect Account →'}
-              </span>
-            </div>
-            <p className="text-[11px] text-[#78716C] mt-0.5">
-              {user
-                ? `Signed in as ${user.displayName || user.email}. Household ID: ${householdId}. Both phones stay updated in real time.`
-                : 'Sign in with Google to sync envelope balances across all phones and laptops.'}
-            </p>
-          </div>
+          <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1.5 pl-8">
+            {user
+              ? `Signed in as ${user.displayName || user.email}. Household ID: ${householdId}. Both phones stay updated in real time.`
+              : 'Sign in with Google to sync envelope balances across all phones and laptops.'}
+          </p>
         </div>
 
         {/* Profile & Photo Settings */}
@@ -307,7 +294,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             Data Management & Danger Zone
           </span>
           <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-0.5">
-            Clear demo values to start fresh with real money, or reload sample demo records anytime.
+            Reset all recorded expenses, salary arrivals, and envelope balances to start fresh.
           </p>
         </div>
 
@@ -315,63 +302,32 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           {/* Reset to Clean ₹0 State Button */}
           <button
             type="button"
-            onClick={() => setResetModalMode('zero')}
+            onClick={() => setIsResetZeroModalOpen(true)}
             id="reset-zero-data-btn"
             className="px-4 py-2.5 rounded-xl bg-[#B85D43] hover:bg-[#A04D35] active:scale-[0.98] text-white text-xs font-bold shadow-xs flex items-center gap-2 cursor-pointer transition-all duration-150"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span>Start Clean (₹0 All Envelopes)</span>
-          </button>
-
-          {/* Restore Sample Demo Data Button */}
-          <button
-            type="button"
-            onClick={() => setResetModalMode('sample')}
-            id="reset-demo-data-btn"
-            className="px-4 py-2.5 rounded-xl bg-[#DC2626]/90 hover:bg-[#DC2626] active:scale-[0.98] text-white text-xs font-bold shadow-xs flex items-center gap-2 cursor-pointer transition-all duration-150"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Restore Sample Demo Data</span>
+            <span>Reset All Balances & Transactions (₹0)</span>
           </button>
         </div>
       </div>
 
       {/* Warning Confirmation Modal */}
       <ResetDataWarningModal
-        isOpen={resetModalMode !== null}
-        onClose={() => setResetModalMode(null)}
-        onConfirm={resetModalMode === 'zero' ? () => resetLedgerToZero(false) : resetToSampleData}
-        title={resetModalMode === 'zero' ? 'Start Clean with ₹0 Ledger?' : 'Restore Sample Demo Data?'}
-        description={
-          resetModalMode === 'zero'
-            ? 'This will immediately reset all envelope balances, transactions, and pending credit card paybacks to ₹0. Your category configuration and partner setup remain untouched.'
-            : 'This will re-populate all envelopes, transactions, and payback reconciliations with the rich demonstration dataset.'
-        }
-        confirmText={resetModalMode === 'zero' ? 'Yes, Reset to ₹0' : 'Yes, Restore Demo Data'}
-        isZeroReset={resetModalMode === 'zero'}
-        bulletPoints={
-          resetModalMode === 'zero'
-            ? [
-                'All envelope balances reset to ₹0 available',
-                'All mock transactions and paybacks are cleared',
-                'Pending card reconciliation is set to ₹0',
-                'Ready immediately for your real salary allocation',
-              ]
-            : [
-                'Default demo envelopes and targets will reload',
-                'Sample grocery, fuel, and dining expenses will appear',
-                'Pending credit card payback will return to demo values',
-                'Great for practicing and previewing features',
-              ]
-        }
+        isOpen={isResetZeroModalOpen}
+        onClose={() => setIsResetZeroModalOpen(false)}
+        onConfirm={() => resetLedgerToZero(false)}
+        title="Reset All Ledger Data to ₹0?"
+        description="This will permanently reset all envelope balances, transactions, and pending credit card paybacks to ₹0. Your envelope categories and partner setup remain untouched."
+        confirmText="Yes, Reset to ₹0"
+        isZeroReset={true}
+        bulletPoints={[
+          'All envelope balances reset to ₹0 available',
+          'All transactions and salary records are cleared',
+          'Pending credit card payback is set to ₹0',
+          'Ready immediately for your real salary allocation',
+        ]}
       />
-
-      {isCreateHhOpen && (
-        <CreateHouseholdModal
-          isOpen={isCreateHhOpen}
-          onClose={() => setIsCreateHhOpen(false)}
-        />
-      )}
     </div>
   );
 };

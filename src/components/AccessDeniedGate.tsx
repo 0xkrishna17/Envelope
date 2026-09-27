@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
-import { CreateHouseholdModal } from './CreateHouseholdModal';
-import { ShieldAlert, LogIn, RefreshCw, LogOut, ArrowRight, PlusCircle, CheckCircle2, Lock, Eye, Sparkles } from 'lucide-react';
+import { ShieldAlert, LogIn, RefreshCw, LogOut, ArrowRight, CheckCircle2, Lock, Sparkles } from 'lucide-react';
 
 interface AccessDeniedGateProps {
   onCheckAgain: () => void;
@@ -10,12 +9,11 @@ interface AccessDeniedGateProps {
 
 export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain }) => {
   const { user, signInWithGoogle, logout, setHouseholdId } = useAuth();
-  const { household, householdId, accessBlockedReason, enterPreviewMode } = useBudget();
+  const { household, householdId, accessBlockedReason } = useBudget();
   const [customHhInput, setCustomHhInput] = useState('');
   const [isSwitchingHh, setIsSwitchingHh] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const handleSignIn = async () => {
     setIsSigningIn(true);
@@ -73,7 +71,7 @@ export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain
             <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-2 leading-relaxed">
               {isAuthRequired ? (
                 <>
-                  Household <strong className="text-[#1F1B16] dark:text-[#EDE8E1]">{household?.name || householdId}</strong> is restricted to authorized Google accounts. Sign in to verify your access, or preview the app below.
+                  Household <strong className="text-[#1F1B16] dark:text-[#EDE8E1]">{household?.name || householdId}</strong> is restricted to authorized Google accounts. Sign in to verify your access.
                 </>
               ) : (
                 <>
@@ -137,32 +135,15 @@ export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain
                 </button>
               </>
             )}
-
-            {/* Quick Preview App Button */}
-            <button
-              onClick={() => enterPreviewMode()}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#EDE8E1] dark:bg-[#2A241F] text-[#1F1B16] dark:text-[#EDE8E1] hover:bg-[#E5DFD5] dark:hover:bg-[#342D27] font-semibold text-xs transition-colors cursor-pointer border border-[#DCD5C9] dark:border-[#3D362F]"
-            >
-              <Eye className="w-3.5 h-3.5 text-[#4E785E]" />
-              <span>Preview App (Open Demo Workspace)</span>
-            </button>
           </div>
 
-          {/* Household Switcher & Create Own */}
+          {/* Household Switcher & Connect */}
           <div className="pt-4 border-t border-[#E8E3DA] dark:border-[#2D2823] space-y-3">
             {!isSwitchingHh ? (
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-[#4E785E] hover:underline font-semibold cursor-pointer"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  <span>Create New Household</span>
-                </button>
-
-                <button
                   onClick={() => setIsSwitchingHh(true)}
-                  className="w-full text-center text-[11px] text-[#78716C] dark:text-[#A8A29E] hover:underline cursor-pointer"
+                  className="w-full text-center text-xs text-[#78716C] dark:text-[#A8A29E] hover:underline cursor-pointer py-1"
                 >
                   Connect to a different Household ID →
                 </button>
@@ -204,13 +185,6 @@ export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain
           </div>
         </div>
       </div>
-
-      {isCreateModalOpen && (
-        <CreateHouseholdModal
-          isOpen={isCreateModalOpen}
-          onClose={() => setIsCreateModalOpen(false)}
-        />
-      )}
     </>
   );
 };
