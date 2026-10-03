@@ -28,7 +28,7 @@ import { Transaction, ActiveTab } from './types';
 import { Plus, PlusCircle, Wallet, RefreshCw, Layers, ShieldCheck, ArrowRight, ArrowLeftRight, Settings, CheckCircle2, X, User, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // App version as instructed by user: "lets add version no of app and with each iteration lets keep increasing version no at bottom right in small text."
-export const APP_VERSION = 'v1.4.30';
+export const APP_VERSION = 'v1.4.33';
 
 function BudgetAppContent() {
   const {

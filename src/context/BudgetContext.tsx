@@ -1,8 +1,41 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode, useRef, useCallback } from 'react';
-import { doc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useMemo, ReactNode, useCallback } from 'react';
+import { Provider } from 'react-redux';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { useApiLoading } from './ApiLoadingContext';
+import { store, useAppDispatch, useAppSelector } from '../store';
+import { ledgerActions } from '../store/ledgerSlice';
+import {
+  selectHousehold,
+  selectMembers,
+  selectActiveMember,
+  selectCategories,
+  selectActiveCategories,
+  selectSalaryEvents,
+  selectAllocations,
+  selectTransactions,
+  selectReconciliations,
+  selectReconciliationLines,
+  selectEnvelopeTransfers,
+  selectInvites,
+  selectSelectedMonth,
+  selectCategoryBalances,
+  selectTotalAvailablePaise,
+  selectTotalPendingPaybackPaise,
+  selectPendingTransfersList,
+  selectPushSettings,
+  selectFirstTimeIntroCompleted,
+  selectHouseholdId,
+  selectSyncStatus,
+  selectLastCloudSync,
+  selectPermissionDenied,
+} from '../store/selectors';
+import {
+  STORAGE_KEYS,
+  subscribeToFirestoreHousehold,
+  flushSyncNow,
+} from '../store/syncMiddleware';
 import {
   Household,
   Membership,
@@ -12,31 +45,13 @@ import {
   Transaction,
   Reconciliation,
   ReconciliationLine,
+  EnvelopeTransfer,
   Invite,
-  CategoryBalanceInfo,
   PushSubscriptionSetting,
-  EnvelopeTransfer
+  CategoryBalanceInfo,
 } from '../types';
-import {
-  INITIAL_HOUSEHOLD,
-  INITIAL_MEMBERS,
-  INITIAL_CATEGORIES,
-  INITIAL_SALARY_EVENTS,
-  INITIAL_ALLOCATIONS,
-  INITIAL_TRANSACTIONS,
-  INITIAL_RECONCILIATIONS,
-  INITIAL_RECONCILIATION_LINES,
-  INITIAL_ENVELOPE_TRANSFERS,
-} from '../data/initialData';
-import {
-  calculateCategoryBalance,
-  calculateMonthSummary,
-  calculateCategoryPendingDebt,
-  executeFifoReconciliation,
-  recomputeTransactionStatuses,
-} from '../utils/budgetLogic';
 
-interface BudgetContextType {
+export interface BudgetContextType {
   household: Household;
   members: Membership[];
   activeMember: Membership;
@@ -48,14 +63,14 @@ interface BudgetContextType {
   reconciliations: Reconciliation[];
   reconciliationLines: ReconciliationLine[];
   invites: Invite[];
-  selectedMonth: string; // 'YYYY-MM'
+  selectedMonth: string;
   setSelectedMonth: (month: string) => void;
   categoryBalances: CategoryBalanceInfo[];
   totalAvailablePaise: number;
   totalPendingPaybackPaise: number;
   pendingTransfersList: (Allocation & { categoryName: string; categoryIcon: string; categoryColor: string })[];
   pushSettings: PushSubscriptionSetting;
-  
+
   // Actions
   setActiveMemberId: (id: string) => void;
   addTransaction: (tx: {
@@ -68,17 +83,17 @@ interface BudgetContextType {
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
   logCorrection: (originalTx: Transaction, differencePaise: number, note?: string) => Transaction;
-  
+
   addSalaryAndAllocations: (
     earnerUserId: string,
     amountPaise: number,
     date: string,
     allocationsList: { categoryId: string; amountPaise: number }[]
   ) => { salaryEvent: SalaryEvent; allocations: Allocation[] };
-  
+
   toggleAllocationTransferred: (allocationId: string) => void;
   markAllAllocationsTransferred: (salaryEventId?: string) => void;
-  
+
   reconcileCategoryCardSpend: (
     categoryId: string,
     amountToPayPaise: number,
@@ -140,48 +155,93 @@ interface BudgetContextType {
   removeAllowedEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-const STORAGE_KEYS = {
-  HOUSEHOLD: 'env_budget_household_v3',
-  MEMBERS: 'env_budget_members_v3',
-  ACTIVE_MEMBER_ID: 'env_budget_active_member_v3',
-  CATEGORIES: 'env_budget_categories_v3',
-  SALARY_EVENTS: 'env_budget_salary_events_v3',
-  ALLOCATIONS: 'env_budget_allocations_v3',
-  TRANSACTIONS: 'env_budget_transactions_v3',
-  RECONCILIATIONS: 'env_budget_reconciliations_v3',
-  RECON_LINES: 'env_budget_recon_lines_v3',
-  ENVELOPE_TRANSFERS: 'env_budget_envelope_transfers_v3',
-  INVITES: 'env_budget_invites_v3',
-  PUSH: 'env_budget_push_v3',
-};
-
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
-export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user, loading: authLoading, householdId, syncStatus: cloudSyncStatus, setSyncStatus, setHouseholdId } = useAuth();
+const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+  const { user, loading: authLoading, householdId: authHouseholdId, setSyncStatus: setAuthSyncStatus } = useAuth();
   const { startApiCall } = useApiLoading();
-  const isRemoteSyncRef = useRef<boolean>(false);
-  const isSyncingRef = useRef<boolean>(false);
-  const pendingSaveRef = useRef<boolean>(false);
-  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const latestStateRef = useRef<any>(null);
-  const [lastCloudSync, setLastCloudSync] = useState<string | null>(null);
-  const [permissionDenied, setPermissionDenied] = useState<boolean>(false);
 
-  // Current month default: e.g. 2026-09
-  const now = new Date();
-  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentYearMonth);
+  // Redux Selectors
+  const household = useAppSelector(selectHousehold);
+  const members = useAppSelector(selectMembers);
+  const activeMember = useAppSelector(selectActiveMember);
+  const categories = useAppSelector(selectCategories);
+  const activeCategories = useAppSelector(selectActiveCategories);
+  const salaryEvents = useAppSelector(selectSalaryEvents);
+  const allocations = useAppSelector(selectAllocations);
+  const transactions = useAppSelector(selectTransactions);
+  const reconciliations = useAppSelector(selectReconciliations);
+  const reconciliationLines = useAppSelector(selectReconciliationLines);
+  const envelopeTransfers = useAppSelector(selectEnvelopeTransfers);
+  const invites = useAppSelector(selectInvites);
+  const selectedMonth = useAppSelector(selectSelectedMonth);
+  const categoryBalances = useAppSelector(selectCategoryBalances);
+  const totalAvailablePaise = useAppSelector(selectTotalAvailablePaise);
+  const totalPendingPaybackPaise = useAppSelector(selectTotalPendingPaybackPaise);
+  const pendingTransfersList = useAppSelector(selectPendingTransfersList);
+  const pushSettings = useAppSelector(selectPushSettings);
+  const isFirstTimeIntroCompleted = useAppSelector(selectFirstTimeIntroCompleted);
+  const householdId = useAppSelector(selectHouseholdId);
+  const syncStatus = useAppSelector(selectSyncStatus);
+  const lastCloudSync = useAppSelector(selectLastCloudSync);
+  const permissionDenied = useAppSelector(selectPermissionDenied);
 
-  // Entities state with localStorage persistence
-  const [household, setHousehold] = useState<Household>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.HOUSEHOLD);
-    return saved ? JSON.parse(saved) : INITIAL_HOUSEHOLD;
-  });
+  // Sync auth household ID with Redux store
+  useEffect(() => {
+    if (authHouseholdId && authHouseholdId !== householdId) {
+      dispatch(ledgerActions.setHouseholdId(authHouseholdId));
+    }
+  }, [authHouseholdId, householdId, dispatch]);
 
-  // Google Account Allowlist & Access Control verification
+  // Keep auth sync status in sync
+  useEffect(() => {
+    if (syncStatus === 'syncing' || syncStatus === 'synced' || syncStatus === 'offline' || syncStatus === 'error') {
+      setAuthSyncStatus(syncStatus);
+    }
+  }, [syncStatus, setAuthSyncStatus]);
+
+  // 1. Initial Storage Hydration on Mount
+  useEffect(() => {
+    try {
+      const savedHh = localStorage.getItem(STORAGE_KEYS.HOUSEHOLD);
+      const savedCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+      const savedSal = localStorage.getItem(STORAGE_KEYS.SALARY_EVENTS);
+      const savedAllocs = localStorage.getItem(STORAGE_KEYS.ALLOCATIONS);
+      const savedTxs = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+      const savedRecs = localStorage.getItem(STORAGE_KEYS.RECONCILIATIONS);
+      const savedLines = localStorage.getItem(STORAGE_KEYS.RECONCILIATION_LINES);
+      const savedTrs = localStorage.getItem(STORAGE_KEYS.ENVELOPE_TRANSFERS);
+      const savedMems = localStorage.getItem(STORAGE_KEYS.MEMBERS);
+      const savedInvs = localStorage.getItem(STORAGE_KEYS.INVITES);
+      const savedPush = localStorage.getItem(STORAGE_KEYS.PUSH_SETTINGS);
+      const lastReset = localStorage.getItem('env_budget_last_reset_timestamp');
+      const introDone = localStorage.getItem('env_budget_first_time_intro_done') === 'true';
+
+      dispatch(
+        ledgerActions.hydrateFromStorage({
+          household: savedHh ? JSON.parse(savedHh) : undefined,
+          categories: savedCats ? JSON.parse(savedCats) : undefined,
+          salaryEvents: savedSal ? JSON.parse(savedSal) : undefined,
+          allocations: savedAllocs ? JSON.parse(savedAllocs) : undefined,
+          transactions: savedTxs ? JSON.parse(savedTxs) : undefined,
+          reconciliations: savedRecs ? JSON.parse(savedRecs) : undefined,
+          reconciliationLines: savedLines ? JSON.parse(savedLines) : undefined,
+          envelopeTransfers: savedTrs ? JSON.parse(savedTrs) : undefined,
+          members: savedMems ? JSON.parse(savedMems) : undefined,
+          invites: savedInvs ? JSON.parse(savedInvs) : undefined,
+          pushSettings: savedPush ? JSON.parse(savedPush) : undefined,
+          firstTimeIntroCompleted: introDone,
+          lastResetAt: lastReset,
+        })
+      );
+    } catch (e) {
+      console.warn('Initial storage hydration note:', e);
+    }
+  }, [dispatch]);
+
+  // 2. Google Account Allowlist & Access Control verification
   const { isAccessAllowed, accessBlockedReason, isOwner } = useMemo(() => {
-    // If household is default preview or demo household, it is ALWAYS allowed
     if (
       !householdId ||
       householdId === 'hh_family_ledger_main' ||
@@ -195,7 +255,6 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       };
     }
 
-    // While Firebase Auth is still resolving on initial app load, NEVER block access or trigger sign-in flash
     if (authLoading) {
       return {
         isAccessAllowed: true,
@@ -204,7 +263,6 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       };
     }
 
-    // For any custom/shared household (e.g. ?household=hh_...), Google Login is ALWAYS mandatory
     if (!user) {
       return {
         isAccessAllowed: false,
@@ -226,7 +284,6 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const allowedEmails = (household.allowed_emails || []).map(e => e.trim().toLowerCase());
     const hasRestrictions = Boolean(ownerEmail || allowedEmails.length > 0);
 
-    // If household has not established any owner or allowlist yet, the signed in user is the owner
     if (!hasRestrictions) {
       return {
         isAccessAllowed: true,
@@ -253,602 +310,38 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     };
   }, [household, householdId, user, permissionDenied, authLoading]);
 
-  const [members, setMembers] = useState<Membership[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.MEMBERS);
-    if (saved) {
-      try {
-        let parsed: Membership[] = JSON.parse(saved);
-        // Remove legacy Krishna and Ritu
-        parsed = parsed
-          .filter(m => m.name.toLowerCase() !== 'ritu' && m.user_id !== 'usr_ritu')
-          .map(m => {
-            if (m.name.toLowerCase() === 'krishna' || m.user_id === 'usr_krishna' || m.user_id === 'usr_priya') {
-              const savedCustomName = localStorage.getItem('env_budget_user_name');
-              return {
-                ...m,
-                user_id: 'usr_me',
-                name: savedCustomName || '',
-                role: 'owner',
-              };
-            }
-            return m;
-          });
-        if (parsed.length === 0) {
-          return INITIAL_MEMBERS;
-        }
-        return parsed;
-      } catch {
-        return INITIAL_MEMBERS;
-      }
-    }
-    return INITIAL_MEMBERS;
-  });
-
-  const [activeMemberId, setActiveMemberId] = useState<string>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_MEMBER_ID);
-    if (saved === 'usr_krishna' || saved === 'usr_priya' || saved === 'usr_ritu') {
-      return 'usr_me';
-    }
-    return saved || INITIAL_MEMBERS[0].user_id;
-  });
-
-  const [categories, setCategories] = useState<Category[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
-    return saved ? JSON.parse(saved) : INITIAL_CATEGORIES;
-  });
-
-  const [salaryEvents, setSalaryEvents] = useState<SalaryEvent[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.SALARY_EVENTS);
-    if (saved) {
-      try {
-        const parsed: SalaryEvent[] = JSON.parse(saved);
-        // Exclude legacy hardcoded demo salary events
-        return parsed
-          .filter(s => s && s.id !== 'sal_sep_1')
-          .map(s => {
-            if (s.earner_user_id === 'usr_krishna' || s.earner_user_id === 'usr_ritu') {
-              return { ...s, earner_user_id: 'usr_me' };
-            }
-            return s;
-          });
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [allocations, setAllocations] = useState<Allocation[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ALLOCATIONS);
-    if (saved) {
-      try {
-        const parsed: Allocation[] = JSON.parse(saved);
-        // Exclude legacy hardcoded demo allocations
-        return parsed.filter(a => a && a.salary_event_id !== 'sal_sep_1' && !a.id.startsWith('alloc_'));
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-    if (saved) {
-      try {
-        const parsed: Transaction[] = JSON.parse(saved);
-        // Exclude legacy hardcoded demo transactions
-        return parsed
-          .filter(t => t && !['tx_1', 'tx_2', 'tx_3', 'tx_4', 'tx_5', 'tx_6'].includes(t.id))
-          .map(t => {
-            if (
-              t.logged_by_user_id === 'usr_krishna' ||
-              t.logged_by_user_id === 'usr_priya' ||
-              t.logged_by_user_id === 'usr_ritu'
-            ) {
-              return { ...t, logged_by_user_id: 'usr_me' };
-            }
-            return t;
-          });
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [reconciliations, setReconciliations] = useState<Reconciliation[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.RECONCILIATIONS);
-    if (saved) {
-      try {
-        const parsed: Reconciliation[] = JSON.parse(saved);
-        return parsed
-          .filter(r => r && r.id !== 'rec_init_1')
-          .map(r => {
-            if (
-              r.logged_by_user_id === 'usr_krishna' ||
-              r.logged_by_user_id === 'usr_priya' ||
-              r.logged_by_user_id === 'usr_ritu'
-            ) {
-              return { ...r, logged_by_user_id: 'usr_me' };
-            }
-            return r;
-          });
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [reconciliationLines, setReconciliationLines] = useState<ReconciliationLine[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.RECON_LINES);
-    if (saved) {
-      try {
-        const parsed: ReconciliationLine[] = JSON.parse(saved);
-        return parsed.filter(l => l && l.id !== 'recline_1' && l.reconciliation_id !== 'rec_init_1');
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [invites, setInvites] = useState<Invite[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.INVITES);
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [envelopeTransfers, setEnvelopeTransfers] = useState<EnvelopeTransfer[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ENVELOPE_TRANSFERS);
-    if (saved) {
-      try {
-        const parsed: EnvelopeTransfer[] = JSON.parse(saved);
-        return parsed
-          .filter(tr => tr && tr.id !== 'env_tr_init_1')
-          .map(tr => {
-            if (
-              tr.logged_by_user_id === 'usr_krishna' ||
-              tr.logged_by_user_id === 'usr_priya' ||
-              tr.logged_by_user_id === 'usr_ritu'
-            ) {
-              return { ...tr, logged_by_user_id: 'usr_me' };
-            }
-            return tr;
-          });
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
-
-  const [pushSettings, setPushSettings] = useState<PushSubscriptionSetting>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.PUSH);
-    return saved
-      ? JSON.parse(saved)
-      : {
-          id: 'push_1',
-          user_id: INITIAL_MEMBERS[0].user_id,
-          reminder_time: '21:00',
-          timezone: 'Asia/Kolkata',
-          enabled: true,
-          created_at: new Date().toISOString(),
-        };
-  });
-
-  // Sync state to LocalStorage
+  // 3. Realtime Firestore Subscription
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.HOUSEHOLD, JSON.stringify(household));
-  }, [household]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(members));
-  }, [members]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_MEMBER_ID, activeMemberId);
-  }, [activeMemberId]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
-  }, [categories]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SALARY_EVENTS, JSON.stringify(salaryEvents));
-  }, [salaryEvents]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ALLOCATIONS, JSON.stringify(allocations));
-  }, [allocations]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
-  }, [transactions]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RECONCILIATIONS, JSON.stringify(reconciliations));
-  }, [reconciliations]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.RECON_LINES, JSON.stringify(reconciliationLines));
-  }, [reconciliationLines]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.INVITES, JSON.stringify(invites));
-  }, [invites]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ENVELOPE_TRANSFERS, JSON.stringify(envelopeTransfers));
-  }, [envelopeTransfers]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PUSH, JSON.stringify(pushSettings));
-  }, [pushSettings]);
-
-  // Keep latestStateRef always synchronized with current state
-  useEffect(() => {
-    latestStateRef.current = {
-      household,
-      members,
-      categories,
-      salaryEvents,
-      allocations,
-      transactions,
-      reconciliations,
-      reconciliationLines,
-      envelopeTransfers,
-      invites,
-      householdId,
-      isAccessAllowed,
-    };
-  }, [
-    household,
-    members,
-    categories,
-    salaryEvents,
-    allocations,
-    transactions,
-    reconciliations,
-    reconciliationLines,
-    envelopeTransfers,
-    invites,
-    householdId,
-    isAccessAllowed,
-  ]);
-
-  // Push local updates to Firestore with queuing and concurrency protection
-  const pushToCloud = useCallback(async () => {
-    if (isRemoteSyncRef.current) return;
-    const current = latestStateRef.current;
-    if (!current || !current.householdId || !current.isAccessAllowed) return;
-
-    if (isSyncingRef.current) {
-      pendingSaveRef.current = true;
-      return;
-    }
-
-    isSyncingRef.current = true;
-    pendingSaveRef.current = false;
-    setSyncStatus('syncing');
-    const stopApi = startApiCall();
-
-    try {
-      const docRef = doc(db, 'households', current.householdId);
-      const timeString = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-      await setDoc(
-        docRef,
-        {
-          household: {
-            ...current.household,
-            id: current.householdId,
-          },
-          owner_email: (current.household.owner_email || user?.email || '').trim().toLowerCase(),
-          allowed_emails: (current.household.allowed_emails || []).map((e: string) => e.trim().toLowerCase()),
-          created_by: current.household.created_by || user?.uid || '',
-          members: current.members,
-          categories: current.categories,
-          salaryEvents: current.salaryEvents,
-          allocations: current.allocations,
-          transactions: current.transactions,
-          reconciliations: current.reconciliations,
-          reconciliationLines: current.reconciliationLines,
-          envelopeTransfers: current.envelopeTransfers,
-          invites: current.invites,
-          lastSyncedAt: timeString,
-          updatedAt: serverTimestamp(),
-          lastUpdatedBy: user?.displayName || user?.email || activeMemberId,
-        },
-        { merge: true }
-      );
-      setLastCloudSync(timeString);
-      setSyncStatus('synced');
-    } catch (err: any) {
-      console.warn('Cloud sync push notice:', err);
-      setSyncStatus('offline');
-      if (
-        err?.code === 'permission-denied' ||
-        err?.message?.toLowerCase().includes('permission') ||
-        err?.message?.toLowerCase().includes('insufficient')
-      ) {
-        setPermissionDenied(true);
-      }
-    } finally {
-      stopApi();
-      isSyncingRef.current = false;
-      if (pendingSaveRef.current) {
-        pendingSaveRef.current = false;
-        setTimeout(() => {
-          pushToCloud();
-        }, 10);
-      }
-    }
-  }, [user, activeMemberId, setSyncStatus, startApiCall]);
-
-  const triggerSync = useCallback((delayMs: number = 80) => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-    }
-    if (delayMs <= 0) {
-      pushToCloud();
-    } else {
-      saveTimerRef.current = setTimeout(() => {
-        pushToCloud();
-      }, delayMs);
-    }
-  }, [pushToCloud]);
-
-  // Flush uncommitted saves before browser refresh or tab close
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      if (!isRemoteSyncRef.current) {
-        pushToCloud();
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('pagehide', handleBeforeUnload);
+    if (!householdId || !isAccessAllowed) return;
+    const unsubscribe = subscribeToFirestoreHousehold(householdId, user?.email, dispatch);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('pagehide', handleBeforeUnload);
+      unsubscribe();
     };
-  }, [pushToCloud]);
+  }, [householdId, isAccessAllowed, user?.email, dispatch]);
 
-  // Firestore Real-Time Cloud Synchronization (§1 & Cross-Device)
-  useEffect(() => {
-    if (!householdId) return;
-    setPermissionDenied(false);
-
-    try {
-      const docRef = doc(db, 'households', householdId);
-      const unsubscribe = onSnapshot(
-        docRef,
-        docSnap => {
-          if (docSnap.exists()) {
-            // Ignore snapshot reflections of local pending writes to avoid loopbacks
-            if (docSnap.metadata.hasPendingWrites) {
-              setSyncStatus('synced');
-              return;
-            }
-
-            const data = docSnap.data();
-            isRemoteSyncRef.current = true;
-
-            // Direct authoritative state sync from Firestore document snapshot
-            if (Array.isArray(data.categories)) {
-              setCategories(data.categories);
-            }
-            if (Array.isArray(data.salaryEvents)) {
-              setSalaryEvents(data.salaryEvents);
-            }
-            if (Array.isArray(data.allocations)) {
-              setAllocations(data.allocations);
-            }
-            if (Array.isArray(data.transactions)) {
-              setTransactions(data.transactions);
-            }
-            if (Array.isArray(data.reconciliations)) {
-              setReconciliations(data.reconciliations);
-            }
-            if (Array.isArray(data.reconciliationLines)) {
-              setReconciliationLines(data.reconciliationLines);
-            }
-            if (Array.isArray(data.envelopeTransfers)) {
-              setEnvelopeTransfers(data.envelopeTransfers);
-            }
-            if (Array.isArray(data.invites)) {
-              setInvites(data.invites);
-            }
-            if (Array.isArray(data.members) && data.members.length > 0) {
-              try {
-                const deletedList: string[] = JSON.parse(
-                  localStorage.getItem('env_budget_deleted_members') || '[]'
-                );
-                const deletedSet = new Set(deletedList);
-                const activeServerMembers = data.members.filter(
-                  (m: Membership) => m && m.user_id && !m.deleted_at && !deletedSet.has(m.user_id)
-                );
-                if (activeServerMembers.length > 0) {
-                  setMembers(activeServerMembers);
-                }
-              } catch {
-                setMembers(data.members.filter((m: Membership) => !m.deleted_at));
-              }
-            }
-
-            if (data.household && data.household.id) {
-              const isIntroDone = Boolean(
-                data.household.first_time_intro_completed ?? data.first_time_intro_completed
-              );
-              const allowedEmails = Array.isArray(data.allowed_emails)
-                ? data.allowed_emails
-                : data.household.allowed_emails || [];
-              const ownerEmail = data.owner_email || data.household.owner_email;
-
-              setHousehold(prev => ({
-                ...prev,
-                ...data.household,
-                id: householdId,
-                allowed_emails: allowedEmails,
-                owner_email: ownerEmail,
-                first_time_intro_completed: isIntroDone,
-              }));
-              if (isIntroDone) {
-                localStorage.setItem('env_budget_first_time_intro_done', 'true');
-                localStorage.setItem('env_budget_tour_completed', 'true');
-              }
-            }
-
-            // Automatic invite pairing code redemption from URL (?code=...)
-            try {
-              const params = new URLSearchParams(window.location.search);
-              const inviteCode = params.get('code');
-              if (inviteCode && user?.email && Array.isArray(data.invites)) {
-                const cleanCode = inviteCode.trim().toUpperCase();
-                const matchedInvite = data.invites.find(
-                  (i: any) => i.code?.toUpperCase() === cleanCode && !i.used_at && new Date(i.expires_at) > new Date()
-                );
-                if (matchedInvite) {
-                  const currentAllowed = Array.from(
-                    new Set([
-                      ...(Array.isArray(data.allowed_emails) ? data.allowed_emails : data.household?.allowed_emails || []),
-                      user.email.toLowerCase(),
-                    ])
-                  );
-                  const updatedInvites = data.invites.map((inv: any) =>
-                    inv.id === matchedInvite.id
-                      ? { ...inv, used_at: new Date().toISOString(), used_by: user.uid, used_by_email: user.email }
-                      : inv
-                  );
-                  setDoc(
-                    docRef,
-                    {
-                      allowed_emails: currentAllowed,
-                      'household.allowed_emails': currentAllowed,
-                      invites: updatedInvites,
-                      updatedAt: serverTimestamp(),
-                    },
-                    { merge: true }
-                  ).catch(e => console.error('Error redeeming invite:', e));
-                }
-              }
-            } catch (err) {
-              console.warn('Invite redemption notice:', err);
-            }
-
-            if (data.lastSyncedAt) {
-              setLastCloudSync(data.lastSyncedAt);
-            } else {
-              setLastCloudSync(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
-            }
-            setSyncStatus('synced');
-
-            setTimeout(() => {
-              isRemoteSyncRef.current = false;
-              if (pendingSaveRef.current) {
-                pendingSaveRef.current = false;
-                pushToCloud();
-              }
-            }, 300);
-          } else {
-            // First time household initialized in Firestore
-            setDoc(docRef, {
-              household: {
-                ...household,
-                id: householdId,
-              },
-              owner_email: (household.owner_email || user?.email || '').trim().toLowerCase(),
-              allowed_emails: (household.allowed_emails || []).map(e => e.trim().toLowerCase()),
-              created_by: household.created_by || user?.uid || '',
-              members,
-              categories,
-              salaryEvents,
-              allocations,
-              transactions,
-              reconciliations,
-              reconciliationLines,
-              envelopeTransfers,
-              invites,
-              createdAt: serverTimestamp(),
-              lastSyncedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-            }).catch(e => {
-              console.warn('Initial cloud doc setup note:', e);
-            });
-          }
-        },
-        error => {
-          console.warn('Firestore onSnapshot notice:', error);
-          setSyncStatus('offline');
-          if (
-            error.code === 'permission-denied' ||
-            error.message?.toLowerCase().includes('permission') ||
-            error.message?.toLowerCase().includes('insufficient')
-          ) {
-            setPermissionDenied(true);
-          }
-        }
-      );
-
-      return () => unsubscribe();
-    } catch (err: any) {
-      console.warn('Firestore subscription setup failed:', err);
-      setSyncStatus('offline');
-      if (
-        err?.code === 'permission-denied' ||
-        err?.message?.toLowerCase().includes('permission')
-      ) {
-        setPermissionDenied(true);
-      }
-    }
-  }, [householdId, user, setSyncStatus, pushToCloud]);
-
-  // Fast auto-save to cloud on state changes
-  useEffect(() => {
-    if (isRemoteSyncRef.current || !isAccessAllowed) return;
-    triggerSync(100);
-  }, [
-    household,
-    members,
-    categories,
-    salaryEvents,
-    allocations,
-    transactions,
-    reconciliations,
-    reconciliationLines,
-    envelopeTransfers,
-    isAccessAllowed,
-    triggerSync,
-  ]);
-
-  // If user signs into a household with no established owner, claim ownership
+  // 4. If user signs into a household with no established owner, claim ownership
   useEffect(() => {
     if (!user || !user.email) return;
     const email = user.email.trim().toLowerCase();
 
-    setHousehold(prev => {
-      if (!prev.owner_email && (!prev.allowed_emails || prev.allowed_emails.length === 0)) {
-        return {
-          ...prev,
+    if (!household.owner_email && (!household.allowed_emails || household.allowed_emails.length === 0)) {
+      dispatch(
+        ledgerActions.setHousehold({
+          ...household,
           owner_email: email,
           allowed_emails: [email],
           created_by: user.uid,
           updated_at: new Date().toISOString(),
-        };
-      }
-      return prev;
-    });
-  }, [user]);
+        })
+      );
+    }
+  }, [user, household, dispatch]);
 
-  // Auto-sync Google user profile into household members roster (only when access is allowed!)
+  // 5. Auto-sync Google user profile into household members roster
   useEffect(() => {
     if (!user || !isAccessAllowed) return;
     const uid = user.uid;
 
-    // Do not auto-recreate if this user was deliberately deleted
     try {
       const deletedList: string[] = JSON.parse(
         localStorage.getItem('env_budget_deleted_members') || '[]'
@@ -856,231 +349,129 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       if (deletedList.includes(uid)) return;
     } catch {}
 
-    const name = user.displayName || user.email?.split('@')[0] || 'Household Partner';
+    const name = user.displayName || user.email?.split('@')[0] || 'User';
     const avatar_url = user.photoURL || undefined;
 
-    setMembers(prev => {
-      const existingIdx = prev.findIndex(m => m.user_id === uid || (user.email && m.email === user.email));
-      if (existingIdx >= 0) {
-        const existing = prev[existingIdx];
-        if (existing.name !== name || existing.avatar_url !== avatar_url) {
-          const updated = [...prev];
-          updated[existingIdx] = { ...existing, name, avatar_url, user_id: uid, email: user.email || existing.email };
-          return updated;
-        }
-        return prev;
-      }
-
-      // If only single default placeholder 'usr_me' exists, transform into Google authenticated user
-      if (prev.length === 1 && prev[0].user_id === 'usr_me') {
-        return [
-          {
-            id: `mem_${Date.now()}`,
-            household_id: householdId,
-            user_id: uid,
-            name,
-            role: 'owner',
-            avatar_color: '#4E785E',
-            avatar_url,
-            email: user.email || undefined,
-            joined_at: new Date().toISOString(),
-          },
-        ];
-      }
-
-      // Partner logging in: add as co-owner to shared household
-      return [
-        ...prev,
-        {
-          id: `mem_${Date.now()}`,
-          household_id: householdId,
-          user_id: uid,
-          name,
-          role: 'owner',
-          avatar_color: prev.length % 2 === 0 ? '#4E785E' : '#B85D43',
-          avatar_url,
-          email: user.email || undefined,
-          joined_at: new Date().toISOString(),
-        },
-      ];
-    });
-
-    setActiveMemberId(uid);
-    localStorage.setItem(STORAGE_KEYS.ACTIVE_MEMBER_ID, uid);
-  }, [user, householdId, isAccessAllowed]);
-
-  const syncNow = useCallback(async () => {
-    setPermissionDenied(false);
-    const stopLoader = startApiCall('Syncing ledger with Firestore...');
-    try {
-      await pushToCloud();
-    } finally {
-      stopLoader();
+    const existing = members.find(m => m.user_id === uid);
+    if (!existing) {
+      dispatch(
+        ledgerActions.updateMemberProfile({
+          userId: uid,
+          updates: { name, avatar_url },
+        })
+      );
     }
-  }, [pushToCloud, startApiCall]);
+  }, [user, isAccessAllowed, members, dispatch]);
 
-  const activeMember = useMemo(() => {
-    return members.find(m => m.user_id === activeMemberId) || members[0];
-  }, [members, activeMemberId]);
+  // Actions Facade
+  const setSelectedMonthHandler = useCallback((month: string) => {
+    dispatch(ledgerActions.setSelectedMonth(month));
+  }, [dispatch]);
 
-  const activeCategories = useMemo(() => {
-    return categories.filter(c => !c.deleted_at && !c.is_archived);
-  }, [categories]);
+  const setActiveMemberIdHandler = useCallback((id: string) => {
+    dispatch(ledgerActions.setActiveMemberId(id));
+  }, [dispatch]);
 
-  // Derived Category Balances & Summaries
-  const categoryBalances = useMemo<CategoryBalanceInfo[]>(() => {
-    // Show all non-deleted categories, even archived if they have money or pending debt (§3)
-    const validCategories = categories.filter(c => !c.deleted_at);
-
-    return validCategories.map(cat => {
-      const availableNow = calculateCategoryBalance(cat.id, allocations, transactions);
-      const { allocated, spent } = calculateMonthSummary(cat.id, allocations, transactions, selectedMonth);
-      const { totalPendingDebt } = calculateCategoryPendingDebt(cat.id, transactions, reconciliationLines);
-
-      return {
-        category: cat,
-        availableNow,
-        thisMonthAllocated: allocated,
-        thisMonthSpent: spent,
-        pendingCardDebt: totalPendingDebt,
-      };
-    }).filter(item => {
-      // If archived, only keep if balance is nonzero or has pending debt
-      if (item.category.is_archived) {
-        return item.availableNow !== 0 || item.pendingCardDebt > 0;
-      }
-      return true;
-    });
-  }, [categories, allocations, transactions, reconciliationLines, selectedMonth]);
-
-  const totalAvailablePaise = useMemo(() => {
-    return categoryBalances.reduce((sum, item) => sum + item.availableNow, 0);
-  }, [categoryBalances]);
-
-  const totalPendingPaybackPaise = useMemo(() => {
-    return categoryBalances.reduce((sum, item) => sum + item.pendingCardDebt, 0);
-  }, [categoryBalances]);
-
-  // Pending bank transfers checklist: allocations that are not yet marked as transferred
-  const pendingTransfersList = useMemo(() => {
-    const pendingAllocs = allocations.filter(a => !a.transferred && !a.deleted_at && a.planned_amount > 0);
-    return pendingAllocs.map(a => {
-      const cat = categories.find(c => c.id === a.category_id);
-      return {
-        ...a,
-        categoryName: cat?.name || 'Unknown Envelope',
-        categoryIcon: cat?.icon || 'Wallet',
-        categoryColor: cat?.color || '#78716C',
-      };
-    });
-  }, [allocations, categories]);
-
-  // Log a transaction (§4.2)
-  const addTransaction = (data: {
+  const addTransactionHandler = useCallback((data: {
     category_id: string;
     amount: number;
     date: string;
     payment_method: Transaction['payment_method'];
     note?: string;
   }): Transaction => {
+    const newId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    dispatch(
+      ledgerActions.addTransaction({
+        id: newId,
+        categoryId: data.category_id,
+        amount: data.amount,
+        paymentMethod: data.payment_method,
+        note: data.note,
+        date: data.date,
+        loggedByUserId: activeMember.user_id,
+      })
+    );
+
     const nowIso = new Date().toISOString();
-    const newTx: Transaction = {
-      id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    return {
+      id: newId,
       household_id: household.id,
       category_id: data.category_id,
       amount: data.amount,
       date: data.date,
-      logged_by_user_id: activeMember.user_id,
       payment_method: data.payment_method,
       note: data.note?.trim() || undefined,
+      logged_by_user_id: activeMember.user_id,
       reconciliation_status: data.payment_method === 'credit_card' ? 'pending' : 'n/a',
       created_at: nowIso,
       updated_at: nowIso,
     };
+  }, [dispatch, activeMember.user_id, household.id]);
 
-    setTransactions(prev => [newTx, ...prev]);
-    triggerSync(0);
-    return newTx;
-  };
-
-  // Edit an entry (§4.3)
-  const updateTransaction = (id: string, updates: Partial<Transaction>) => {
-    setTransactions(prev =>
-      prev.map(tx => {
-        if (tx.id !== id) return tx;
-        return {
-          ...tx,
-          ...updates,
-          updated_at: new Date().toISOString(),
-        };
+  const updateTransactionHandler = useCallback((id: string, updates: Partial<Transaction>) => {
+    const existing = transactions.find(t => t.id === id);
+    if (!existing) return;
+    dispatch(
+      ledgerActions.updateTransaction({
+        id,
+        categoryId: updates.category_id || existing.category_id,
+        amount: updates.amount !== undefined ? updates.amount : existing.amount,
+        paymentMethod: updates.payment_method || existing.payment_method,
+        note: updates.note !== undefined ? updates.note : existing.note,
+        date: updates.date || existing.date,
       })
     );
-    triggerSync(0);
-  };
+  }, [dispatch, transactions]);
 
-  // Delete transaction (Soft delete per §4.3 & §5)
-  const deleteTransaction = (id: string) => {
-    const nowIso = new Date().toISOString();
-    setTransactions(prev =>
-      prev.map(tx => {
-        if (tx.id !== id) return tx;
-        return {
-          ...tx,
-          deleted_at: nowIso,
-          updated_at: nowIso,
-        };
+  const deleteTransactionHandler = useCallback((id: string) => {
+    dispatch(ledgerActions.deleteTransaction(id));
+  }, [dispatch]);
+
+  const logCorrectionHandler = useCallback((originalTx: Transaction, differencePaise: number, note?: string): Transaction => {
+    const corrNote = note || `Adjustment for "${originalTx.note || 'Transaction'}"`;
+    dispatch(
+      ledgerActions.logCorrection({
+        categoryId: originalTx.category_id,
+        amountPaise: differencePaise,
+        note: corrNote,
+        loggedByUserId: activeMember.user_id,
       })
     );
 
-    // Also remove associated reconciliation lines and recompute statuses
-    const updatedLines = reconciliationLines.filter(l => l.transaction_id !== id);
-    setReconciliationLines(updatedLines);
-
-    // Recompute
-    setTransactions(curr => {
-      const statusMap = recomputeTransactionStatuses(curr, updatedLines);
-      return curr.map(t => {
-        const newStatus = statusMap.get(t.id);
-        return newStatus ? { ...t, reconciliation_status: newStatus } : t;
-      });
-    });
-    triggerSync(0);
-  };
-
-  // Log a correction (§4.3) for partially_reconciled or reconciled transactions
-  const logCorrection = (originalTx: Transaction, differencePaise: number, note?: string): Transaction => {
     const nowIso = new Date().toISOString();
-    const today = new Date().toISOString().split('T')[0];
-    const correctionTx: Transaction = {
-      id: `tx_corr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    return {
+      id: `tx_corr_${Date.now()}`,
       household_id: household.id,
       category_id: originalTx.category_id,
-      amount: differencePaise, // positive or negative
-      date: today,
+      amount: differencePaise,
+      payment_method: 'secondary_account_debit',
+      note: `[Correction] ${corrNote}`,
+      date: nowIso.split('T')[0],
       logged_by_user_id: activeMember.user_id,
-      payment_method: originalTx.payment_method,
-      note: note || `Correction for tx #${originalTx.id.slice(-4)} (${originalTx.note || 'entry'})`,
-      reconciliation_status: originalTx.payment_method === 'credit_card' ? 'pending' : 'n/a',
+      reconciliation_status: 'n/a',
       created_at: nowIso,
       updated_at: nowIso,
     };
+  }, [dispatch, activeMember.user_id, household.id]);
 
-    setTransactions(prev => [correctionTx, ...prev]);
-    triggerSync(0);
-    return correctionTx;
-  };
-
-  // Salary Arrival & Allocation Flow (§4.1)
-  const addSalaryAndAllocations = (
+  const addSalaryAndAllocationsHandler = useCallback((
     earnerUserId: string,
     amountPaise: number,
     date: string,
     allocationsList: { categoryId: string; amountPaise: number }[]
   ) => {
-    const nowIso = new Date().toISOString();
-    const salaryId = `sal_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    dispatch(
+      ledgerActions.addSalaryAndAllocations({
+        earnerUserId,
+        salaryAmountPaise: amountPaise,
+        date,
+        allocations: allocationsList,
+      })
+    );
 
-    const newSalaryEvent: SalaryEvent = {
+    const salaryId = `sal_${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const mockSalary: SalaryEvent = {
       id: salaryId,
       household_id: household.id,
       earner_user_id: earnerUserId,
@@ -1089,157 +480,128 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       created_at: nowIso,
     };
 
-    // Calculate unallocated leftover
-    const totalAllocated = allocationsList.reduce((sum, item) => sum + item.amountPaise, 0);
-    const unallocatedAmount = Math.max(0, amountPaise - totalAllocated);
+    return { salaryEvent: mockSalary, allocations: [] };
+  }, [dispatch, household.id]);
 
-    const unallocatedCat = categories.find(c => c.is_unallocated);
-    const unallocatedCatId = unallocatedCat?.id || 'cat_unallocated';
+  const toggleAllocationTransferredHandler = useCallback((allocationId: string) => {
+    dispatch(ledgerActions.toggleAllocationTransferred(allocationId));
+  }, [dispatch]);
 
-    const newAllocations: Allocation[] = [];
+  const markAllAllocationsTransferredHandler = useCallback((salaryEventId?: string) => {
+    dispatch(ledgerActions.markAllAllocationsTransferred(salaryEventId));
+  }, [dispatch]);
 
-    // Category allocations
-    for (const alloc of allocationsList) {
-      if (alloc.amountPaise > 0) {
-        newAllocations.push({
-          id: `alloc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          salary_event_id: salaryId,
-          category_id: alloc.categoryId,
-          planned_amount: alloc.amountPaise,
-          transferred: false, // Generates the post-salary transfer checklist (§4.1 step 6)
-          created_at: nowIso,
-          updated_at: nowIso,
-        });
-      }
-    }
-
-    // Unallocated leftover
-    if (unallocatedAmount > 0) {
-      newAllocations.push({
-        id: `alloc_un_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        salary_event_id: salaryId,
-        category_id: unallocatedCatId,
-        planned_amount: unallocatedAmount,
-        transferred: false,
-        created_at: nowIso,
-        updated_at: nowIso,
-      });
-    }
-
-    setSalaryEvents(prev => [newSalaryEvent, ...prev]);
-    setAllocations(prev => [...newAllocations, ...prev]);
-    triggerSync(0);
-
-    return { salaryEvent: newSalaryEvent, allocations: newAllocations };
-  };
-
-  const toggleAllocationTransferred = (allocationId: string) => {
-    const nowIso = new Date().toISOString();
-    setAllocations(prev =>
-      prev.map(a => {
-        if (a.id !== allocationId) return a;
-        const newTransferred = !a.transferred;
-        return {
-          ...a,
-          transferred: newTransferred,
-          transferred_at: newTransferred ? nowIso : null,
-          updated_at: nowIso,
-        };
-      })
-    );
-  };
-
-  const markAllAllocationsTransferred = (salaryEventId?: string) => {
-    const nowIso = new Date().toISOString();
-    setAllocations(prev =>
-      prev.map(a => {
-        if (salaryEventId && a.salary_event_id !== salaryEventId) return a;
-        if (a.transferred) return a;
-        return {
-          ...a,
-          transferred: true,
-          transferred_at: nowIso,
-          updated_at: nowIso,
-        };
-      })
-    );
-  };
-
-  // Reconcile Credit Card Payback with FIFO matching (§4.4)
-  const reconcileCategoryCardSpend = (
+  const reconcileCategoryCardSpendHandler = useCallback((
     categoryId: string,
     amountToPayPaise: number,
     date: string
-  ): { reconciliation: Reconciliation; lines: ReconciliationLine[] } => {
-    const nowIso = new Date().toISOString();
-    const reconciliationId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-    // Execute FIFO
-    const { createdLines, transactionStatusUpdates } = executeFifoReconciliation(
-      reconciliationId,
-      categoryId,
-      amountToPayPaise,
-      transactions,
-      reconciliationLines
-    );
-
-    const newReconciliation: Reconciliation = {
-      id: reconciliationId,
-      household_id: household.id,
-      category_id: categoryId,
-      total_amount: amountToPayPaise,
-      date,
-      logged_by_user_id: activeMember.user_id,
-      created_at: nowIso,
-    };
-
-    // Update statuses
-    setTransactions(prev =>
-      prev.map(tx => {
-        const update = transactionStatusUpdates.find(u => u.transactionId === tx.id);
-        if (update) {
-          return {
-            ...tx,
-            reconciliation_status: update.status,
-            updated_at: nowIso,
-          };
-        }
-        return tx;
+  ) => {
+    const recId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    dispatch(
+      ledgerActions.reconcileCategoryCardSpend({
+        categoryId,
+        amountToPayPaise,
+        date,
+        loggedByUserId: activeMember.user_id,
+        reconciliationId: recId,
       })
     );
 
-    setReconciliationLines(prev => [...prev, ...createdLines]);
-    setReconciliations(prev => [newReconciliation, ...prev]);
-    triggerSync(0);
-
-    return { reconciliation: newReconciliation, lines: createdLines };
-  };
-
-  // Delete reconciliation (§4.3)
-  const deleteReconciliation = (reconciliationId: string) => {
     const nowIso = new Date().toISOString();
-    // Soft delete reconciliation
-    setReconciliations(prev =>
-      prev.map(r => (r.id === reconciliationId ? { ...r, deleted_at: nowIso } : r))
+    return {
+      reconciliation: {
+        id: recId,
+        household_id: household.id,
+        category_id: categoryId,
+        total_amount: amountToPayPaise,
+        date,
+        logged_by_user_id: activeMember.user_id,
+        created_at: nowIso,
+      },
+      lines: [],
+    };
+  }, [dispatch, activeMember.user_id, household.id]);
+
+  const deleteReconciliationHandler = useCallback((reconciliationId: string) => {
+    dispatch(ledgerActions.deleteReconciliation(reconciliationId));
+  }, [dispatch]);
+
+  const moveEnvelopeFundsHandler = useCallback((params: {
+    fromCategoryId: string;
+    toCategoryId: string;
+    amountPaise: number;
+    date?: string;
+    note?: string;
+  }) => {
+    const { fromCategoryId, toCategoryId, amountPaise, date, note } = params;
+    if (!fromCategoryId || !toCategoryId) {
+      return { success: false, error: 'Please select both source and destination envelopes.' };
+    }
+    if (fromCategoryId === toCategoryId) {
+      return { success: false, error: 'Source and destination envelopes must be different.' };
+    }
+    if (!amountPaise || amountPaise <= 0) {
+      return { success: false, error: 'Transfer amount must be greater than zero.' };
+    }
+
+    dispatch(
+      ledgerActions.moveEnvelopeFunds({
+        fromCategoryId,
+        toCategoryId,
+        amountPaise,
+        date,
+        note,
+        loggedByUserId: activeMember.user_id,
+      })
     );
 
-    // Remove its lines
-    const remainingLines = reconciliationLines.filter(l => l.reconciliation_id !== reconciliationId);
-    setReconciliationLines(remainingLines);
+    return { success: true };
+  }, [dispatch, activeMember.user_id]);
 
-    // Recompute statuses of transactions back to pending or partially_reconciled automatically!
-    setTransactions(prev => {
-      const statusMap = recomputeTransactionStatuses(prev, remainingLines);
-      return prev.map(t => {
-        const newStatus = statusMap.get(t.id);
-        return newStatus ? { ...t, reconciliation_status: newStatus, updated_at: nowIso } : t;
-      });
-    });
-    triggerSync(0);
-  };
+  const deleteEnvelopeTransferHandler = useCallback((transferId: string) => {
+    dispatch(ledgerActions.deleteEnvelopeTransfer(transferId));
+  }, [dispatch]);
 
-  // Categories CRUD (§4.7 & §5: unique case-insensitive constraint)
-  const createCategory = (name: string, icon: string, color: string, target_amount?: number) => {
+  const addCategoryFundsHandler = useCallback((params: {
+    categoryId: string;
+    amountPaise: number;
+    source?: string;
+    note?: string;
+    date?: string;
+    depositHolding?: 'secondary_account' | 'cash' | 'primary_account';
+    transferred?: boolean;
+    loggedByUserId?: string;
+  }) => {
+    const { categoryId, amountPaise, source, note, date, depositHolding, transferred, loggedByUserId } = params;
+    const cat = categories.find(c => c.id === categoryId && !c.deleted_at);
+    if (!cat) {
+      return { success: false, error: 'Envelope not found or has been deleted.' };
+    }
+    if (!amountPaise || amountPaise <= 0) {
+      return { success: false, error: 'Amount must be greater than zero.' };
+    }
+
+    dispatch(
+      ledgerActions.addCategoryFunds({
+        categoryId,
+        amountPaise,
+        source,
+        note,
+        date,
+        depositHolding,
+        transferred,
+        loggedByUserId: loggedByUserId || activeMember.user_id,
+      })
+    );
+
+    return { success: true };
+  }, [dispatch, categories, activeMember.user_id]);
+
+  const deleteCategoryFundsHandler = useCallback((allocationId: string) => {
+    dispatch(ledgerActions.deleteCategoryFunds(allocationId));
+  }, [dispatch]);
+
+  const createCategoryHandler = useCallback((name: string, icon: string, color: string, target_amount?: number) => {
     const trimmed = name.trim();
     if (!trimmed) {
       return { success: false, error: 'Category name is required' };
@@ -1252,25 +614,18 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       return { success: false, error: `A category named "${trimmed}" already exists.` };
     }
 
-    const nowIso = new Date().toISOString();
-    const newCat: Category = {
-      id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      household_id: household.id,
-      name: trimmed,
-      icon,
-      color,
-      target_amount: target_amount && target_amount > 0 ? target_amount : undefined,
-      is_archived: false,
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-
-    setCategories(prev => [...prev, newCat]);
-    triggerSync(0);
+    dispatch(
+      ledgerActions.createCategory({
+        name: trimmed,
+        icon,
+        color,
+        target_amount,
+      })
+    );
     return { success: true };
-  };
+  }, [dispatch, categories]);
 
-  const updateCategory = (id: string, updates: Partial<Category>) => {
+  const updateCategoryHandler = useCallback((id: string, updates: Partial<Category>) => {
     if (updates.name) {
       const trimmed = updates.name.trim();
       const collision = categories.some(
@@ -1281,135 +636,92 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     }
 
-    const nowIso = new Date().toISOString();
-    setCategories(prev =>
-      prev.map(c => (c.id === id ? { ...c, ...updates, updated_at: nowIso } : c))
-    );
-    triggerSync(0);
+    dispatch(ledgerActions.updateCategory({ id, updates }));
     return { success: true };
-  };
+  }, [dispatch, categories]);
 
-  const archiveCategory = (id: string) => {
-    const nowIso = new Date().toISOString();
-    setCategories(prev =>
-      prev.map(c => (c.id === id ? { ...c, is_archived: true, updated_at: nowIso } : c))
-    );
-    triggerSync(0);
-  };
+  const archiveCategoryHandler = useCallback((id: string) => {
+    dispatch(ledgerActions.archiveCategory(id));
+  }, [dispatch]);
 
-  const unarchiveCategory = (id: string) => {
-    const nowIso = new Date().toISOString();
-    setCategories(prev =>
-      prev.map(c => (c.id === id ? { ...c, is_archived: false, updated_at: nowIso } : c))
-    );
-    triggerSync(0);
-  };
+  const unarchiveCategoryHandler = useCallback((id: string) => {
+    dispatch(ledgerActions.unarchiveCategory(id));
+  }, [dispatch]);
 
-  // Household Invite (§4.8: 8 chars, 48 hours expiry)
-  const createInvite = (): Invite => {
+  const updateMemberNameHandler = useCallback((userId: string, newName: string) => {
+    dispatch(ledgerActions.updateMemberName({ userId, newName }));
+  }, [dispatch]);
+
+  const updateMemberProfileHandler = useCallback((
+    userId: string,
+    updates: { name?: string; avatar_url?: string; avatar_color?: string }
+  ) => {
+    dispatch(ledgerActions.updateMemberProfile({ userId, updates }));
+  }, [dispatch]);
+
+  const deleteMemberHandler = useCallback((userId: string) => {
+    if (userId === activeMember.user_id) {
+      return { success: false, error: 'You cannot delete yourself from the household.' };
+    }
+    dispatch(ledgerActions.deleteMember(userId));
+    return { success: true };
+  }, [dispatch, activeMember.user_id]);
+
+  const createInviteHandler = useCallback((): Invite => {
     const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    dispatch(ledgerActions.createInvite({ code, createdBy: activeMember.user_id }));
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
-
-    const newInvite: Invite = {
+    return {
       id: `inv_${Date.now()}`,
       household_id: household.id,
       code,
       created_by: activeMember.user_id,
       created_at: now.toISOString(),
-      expires_at: expiresAt,
+      expires_at: new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString(),
     };
+  }, [dispatch, activeMember.user_id, household.id]);
 
-    setInvites(prev => [newInvite, ...prev]);
-    return newInvite;
-  };
+  const revokeInviteHandler = useCallback((inviteId: string) => {
+    dispatch(ledgerActions.revokeInvite(inviteId));
+  }, [dispatch]);
 
-  const revokeInvite = (inviteId: string) => {
-    setInvites(prev => prev.filter(i => i.id !== inviteId));
-  };
+  const updatePushSettingsHandler = useCallback((reminder_time: string, enabled: boolean) => {
+    dispatch(ledgerActions.updatePushSettings({ reminder_time, enabled }));
+  }, [dispatch]);
 
-  const updateMemberName = (userId: string, newName: string) => {
-    const trimmed = newName.trim();
-    if (!trimmed) return;
-    setMembers(prev => prev.map(m => m.user_id === userId ? { ...m, name: trimmed } : m));
-    triggerSync(0);
-  };
+  // ATOMIC ZERO RESET
+  const resetLedgerToZeroHandler = useCallback(async (isFirstTimeIntro: boolean = false) => {
+    const resetIso = new Date().toISOString();
+    const customUserName = localStorage.getItem('env_budget_user_name') || undefined;
 
-  const updateMemberProfile = (
-    userId: string,
-    updates: { name?: string; avatar_url?: string; avatar_color?: string }
-  ) => {
-    setMembers(prev =>
-      prev.map(m => {
-        if (m.user_id === userId) {
-          return {
-            ...m,
-            name: updates.name?.trim() ? updates.name.trim() : m.name,
-            avatar_url: updates.avatar_url !== undefined ? updates.avatar_url : m.avatar_url,
-            avatar_color: updates.avatar_color || m.avatar_color,
-          };
-        }
-        return m;
+    // 1. Dispatch atomic zero reset to Redux Store
+    dispatch(
+      ledgerActions.resetLedgerToZero({
+        resetIso,
+        userName: customUserName,
       })
     );
-    triggerSync(0);
-  };
 
-  const deleteMember = (userId: string): { success: boolean; error?: string } => {
-    const activeMembers = members.filter(m => !m.deleted_at);
-    if (activeMembers.length <= 1) {
-      return {
-        success: false,
-        error: 'Cannot remove the only member in the household. At least one member is required.',
-      };
-    }
-
-    const memberToDelete = members.find(m => m.user_id === userId);
-    if (!memberToDelete) {
-      return { success: false, error: 'Member not found.' };
-    }
-
-    const remaining = members.filter(m => m.user_id !== userId);
-    setMembers(remaining);
-
-    // Save to deleted members local storage blacklist to prevent auto-recreation
+    // 2. Mark intro completed on server API if present
     try {
-      const deletedList: string[] = JSON.parse(
-        localStorage.getItem('env_budget_deleted_members') || '[]'
-      );
-      if (!deletedList.includes(userId)) {
-        deletedList.push(userId);
-        localStorage.setItem('env_budget_deleted_members', JSON.stringify(deletedList));
-      }
-    } catch (e) {
-      console.warn('Error saving deleted member blacklist:', e);
+      fetch(`/api/household/${householdId}/complete-intro`, { method: 'POST' }).catch(() => {});
+    } catch {}
+
+    // 3. Immediately flush state to Firestore
+    await flushSyncNow();
+  }, [dispatch, householdId]);
+
+  const syncNowHandler = useCallback(async () => {
+    dispatch(ledgerActions.setPermissionDenied(false));
+    const stopLoader = startApiCall('Syncing ledger with Firestore...');
+    try {
+      await flushSyncNow();
+    } finally {
+      stopLoader();
     }
+  }, [dispatch, startApiCall]);
 
-    // If the deleted member was active, switch to first remaining member
-    if (activeMemberId === userId) {
-      const nextActiveId = remaining[0]?.user_id || 'usr_me';
-      setActiveMemberId(nextActiveId);
-      localStorage.setItem(STORAGE_KEYS.ACTIVE_MEMBER_ID, nextActiveId);
-    }
-
-    // Immediately push updated members roster to Firestore so other devices sync
-    if (db && householdId) {
-      const docRef = doc(db, 'households', householdId);
-      setDoc(
-        docRef,
-        {
-          members: remaining,
-          updated_at: serverTimestamp(),
-          lastUpdatedBy: user?.displayName || user?.email || 'App',
-        },
-        { merge: true }
-      ).catch(err => console.warn('Could not sync deleted member to cloud:', err));
-    }
-
-    return { success: true };
-  };
-
-  const addAllowedEmail = async (emailInput: string): Promise<{ success: boolean; error?: string }> => {
+  const addAllowedEmailHandler = useCallback(async (emailInput: string) => {
     const email = emailInput.trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
@@ -1431,33 +743,12 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       updated_at: new Date().toISOString(),
     };
 
-    setHousehold(updatedHousehold);
-    localStorage.setItem(STORAGE_KEYS.HOUSEHOLD, JSON.stringify(updatedHousehold));
-
-    if (db && householdId) {
-      try {
-        const docRef = doc(db, 'households', householdId);
-        await setDoc(
-          docRef,
-          {
-            household: updatedHousehold,
-            allowed_emails: newAllowed,
-            owner_email: updatedHousehold.owner_email,
-            updatedAt: serverTimestamp(),
-            lastUpdatedBy: user?.displayName || user?.email || 'Owner',
-          },
-          { merge: true }
-        );
-      } catch (err: any) {
-        console.error('Error adding allowed email to Firestore:', err);
-        return { success: false, error: 'Failed to update cloud allowlist: ' + (err.message || err) };
-      }
-    }
-
+    dispatch(ledgerActions.setHousehold(updatedHousehold));
+    await flushSyncNow();
     return { success: true };
-  };
+  }, [household, user?.email, dispatch]);
 
-  const removeAllowedEmail = async (emailInput: string): Promise<{ success: boolean; error?: string }> => {
+  const removeAllowedEmailHandler = useCallback(async (emailInput: string) => {
     const email = emailInput.trim().toLowerCase();
     const ownerEmail = (household.owner_email || '').trim().toLowerCase();
     if (email === ownerEmail) {
@@ -1473,390 +764,147 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       updated_at: new Date().toISOString(),
     };
 
-    setHousehold(updatedHousehold);
-    localStorage.setItem(STORAGE_KEYS.HOUSEHOLD, JSON.stringify(updatedHousehold));
-
-    if (db && householdId) {
-      try {
-        const docRef = doc(db, 'households', householdId);
-        await setDoc(
-          docRef,
-          {
-            household: updatedHousehold,
-            allowed_emails: newAllowed,
-            owner_email: updatedHousehold.owner_email,
-            updatedAt: serverTimestamp(),
-            lastUpdatedBy: user?.displayName || user?.email || 'Owner',
-          },
-          { merge: true }
-        );
-      } catch (err: any) {
-        console.error('Error removing allowed email from Firestore:', err);
-        return { success: false, error: 'Failed to update cloud allowlist: ' + (err.message || err) };
-      }
-    }
-
+    dispatch(ledgerActions.setHousehold(updatedHousehold));
+    await flushSyncNow();
     return { success: true };
-  };
+  }, [household, dispatch]);
 
-  const updatePushSettings = (reminder_time: string, enabled: boolean) => {
-    setPushSettings(prev => ({
-      ...prev,
-      reminder_time,
-      enabled,
-    }));
-  };
-
-  const moveEnvelopeFunds = (params: {
-    fromCategoryId: string;
-    toCategoryId: string;
-    amountPaise: number;
-    date?: string;
-    note?: string;
-  }): { success: boolean; error?: string; transfer?: EnvelopeTransfer } => {
-    const { fromCategoryId, toCategoryId, amountPaise, date, note } = params;
-
-    if (!fromCategoryId || !toCategoryId) {
-      return { success: false, error: 'Please select both source and destination envelopes.' };
-    }
-    if (fromCategoryId === toCategoryId) {
-      return { success: false, error: 'Source and destination envelopes must be different.' };
-    }
-    if (!amountPaise || amountPaise <= 0) {
-      return { success: false, error: 'Transfer amount must be greater than zero.' };
-    }
-
-    const nowIso = new Date().toISOString();
-    const txDate = date || nowIso.split('T')[0];
-    const transferId = `env_tr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-    const newTransfer: EnvelopeTransfer = {
-      id: transferId,
-      household_id: household.id,
-      from_category_id: fromCategoryId,
-      to_category_id: toCategoryId,
-      amount: amountPaise,
-      date: txDate,
-      logged_by_user_id: activeMember.user_id,
-      note: note?.trim() || undefined,
-      created_at: nowIso,
-    };
-
-    // Create paired allocations to immediately adjust envelope balances
-    const allocFrom: Allocation = {
-      id: `alloc_tr_${transferId}_from`,
-      salary_event_id: transferId,
-      category_id: fromCategoryId,
-      planned_amount: -amountPaise,
-      transferred: true, // internal envelope transfer, funds already in spend account
-      transferred_at: nowIso,
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-
-    const allocTo: Allocation = {
-      id: `alloc_tr_${transferId}_to`,
-      salary_event_id: transferId,
-      category_id: toCategoryId,
-      planned_amount: amountPaise,
-      transferred: true, // internal envelope transfer, funds already in spend account
-      transferred_at: nowIso,
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-
-    setAllocations(prev => [allocTo, allocFrom, ...prev]);
-    setEnvelopeTransfers(prev => [newTransfer, ...prev]);
-    triggerSync(0);
-
-    return { success: true, transfer: newTransfer };
-  };
-
-  const deleteEnvelopeTransfer = (transferId: string) => {
-    setEnvelopeTransfers(prev => prev.filter(t => t.id !== transferId));
-    setAllocations(prev => prev.filter(a => a.salary_event_id !== transferId));
-    triggerSync(0);
-  };
-
-  // Direct envelope top-up without going through salary flow
-  const addCategoryFunds = (params: {
-    categoryId: string;
-    amountPaise: number;
-    source?: string;
-    note?: string;
-    date?: string;
-    depositHolding?: 'secondary_account' | 'cash' | 'primary_account';
-    transferred?: boolean;
-    loggedByUserId?: string;
-  }): { success: boolean; error?: string; allocation?: Allocation } => {
-    const {
-      categoryId,
-      amountPaise,
-      source = 'Manual Top-Up',
-      note,
-      date,
-      depositHolding = 'secondary_account',
-      transferred: explicitTransferred,
-      loggedByUserId,
-    } = params;
-
-    const targetCategory = categories.find(c => c.id === categoryId && !c.deleted_at);
-    if (!targetCategory) {
-      return { success: false, error: 'Envelope not found or has been deleted.' };
-    }
-
-    if (!amountPaise || amountPaise <= 0) {
-      return { success: false, error: 'Amount must be greater than zero.' };
-    }
-
-    const nowIso = new Date().toISOString();
-    const entryDate = date || nowIso.split('T')[0];
-    const topupId = `env_topup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-
-    // If deposited to primary account and not explicitly set, transferred is false (reminds via bank transfer checklist)
-    // If deposited to spend account or cash, funds are already available immediately
-    const isTransferred = explicitTransferred !== undefined
-      ? explicitTransferred
-      : depositHolding !== 'primary_account';
-
-    const newAllocation: Allocation = {
-      id: `alloc_${topupId}`,
-      salary_event_id: topupId,
-      category_id: categoryId,
-      planned_amount: amountPaise,
-      transferred: isTransferred,
-      transferred_at: isTransferred ? nowIso : null,
-      created_at: entryDate ? `${entryDate}T12:00:00.000Z` : nowIso,
-      updated_at: nowIso,
-      source,
-      note: note?.trim() || undefined,
-      logged_by_user_id: loggedByUserId || activeMember.user_id,
-      deposit_holding: depositHolding,
-    };
-
-    setAllocations(prev => [newAllocation, ...prev]);
-    triggerSync(0);
-
-    return { success: true, allocation: newAllocation };
-  };
-
-  const deleteCategoryFunds = (allocationId: string) => {
-    setAllocations(prev => prev.filter(a => a.id !== allocationId));
-    triggerSync(0);
-  };
-
-  const isFirstTimeIntroCompleted = Boolean(
-    household.first_time_intro_completed ||
-    localStorage.getItem('env_budget_first_time_intro_done') === 'true'
+  const contextValue: BudgetContextType = useMemo(
+    () => ({
+      household,
+      members,
+      activeMember,
+      categories,
+      activeCategories,
+      salaryEvents,
+      allocations,
+      transactions,
+      reconciliations,
+      reconciliationLines,
+      envelopeTransfers,
+      invites,
+      selectedMonth,
+      setSelectedMonth: setSelectedMonthHandler,
+      categoryBalances,
+      totalAvailablePaise,
+      totalPendingPaybackPaise,
+      pendingTransfersList,
+      pushSettings,
+      setActiveMemberId: setActiveMemberIdHandler,
+      addTransaction: addTransactionHandler,
+      updateTransaction: updateTransactionHandler,
+      deleteTransaction: deleteTransactionHandler,
+      logCorrection: logCorrectionHandler,
+      addSalaryAndAllocations: addSalaryAndAllocationsHandler,
+      toggleAllocationTransferred: toggleAllocationTransferredHandler,
+      markAllAllocationsTransferred: markAllAllocationsTransferredHandler,
+      reconcileCategoryCardSpend: reconcileCategoryCardSpendHandler,
+      deleteReconciliation: deleteReconciliationHandler,
+      moveEnvelopeFunds: moveEnvelopeFundsHandler,
+      deleteEnvelopeTransfer: deleteEnvelopeTransferHandler,
+      addCategoryFunds: addCategoryFundsHandler,
+      deleteCategoryFunds: deleteCategoryFundsHandler,
+      createCategory: createCategoryHandler,
+      updateCategory: updateCategoryHandler,
+      archiveCategory: archiveCategoryHandler,
+      unarchiveCategory: unarchiveCategoryHandler,
+      updateMemberName: updateMemberNameHandler,
+      updateMemberProfile: updateMemberProfileHandler,
+      deleteMember: deleteMemberHandler,
+      createInvite: createInviteHandler,
+      revokeInvite: revokeInviteHandler,
+      updatePushSettings: updatePushSettingsHandler,
+      resetLedgerToZero: resetLedgerToZeroHandler,
+      isFirstTimeIntroCompleted,
+      householdId,
+      cloudSyncStatus: syncStatus === 'idle' ? 'synced' : syncStatus,
+      lastCloudSync,
+      syncNow: syncNowHandler,
+      isAccessAllowed,
+      authLoading,
+      accessBlockedReason,
+      isOwner,
+      addAllowedEmail: addAllowedEmailHandler,
+      removeAllowedEmail: removeAllowedEmailHandler,
+    }),
+    [
+      household,
+      members,
+      activeMember,
+      categories,
+      activeCategories,
+      salaryEvents,
+      allocations,
+      transactions,
+      reconciliations,
+      reconciliationLines,
+      envelopeTransfers,
+      invites,
+      selectedMonth,
+      setSelectedMonthHandler,
+      categoryBalances,
+      totalAvailablePaise,
+      totalPendingPaybackPaise,
+      pendingTransfersList,
+      pushSettings,
+      setActiveMemberIdHandler,
+      addTransactionHandler,
+      updateTransactionHandler,
+      deleteTransactionHandler,
+      logCorrectionHandler,
+      addSalaryAndAllocationsHandler,
+      toggleAllocationTransferredHandler,
+      markAllAllocationsTransferredHandler,
+      reconcileCategoryCardSpendHandler,
+      deleteReconciliationHandler,
+      moveEnvelopeFundsHandler,
+      deleteEnvelopeTransferHandler,
+      addCategoryFundsHandler,
+      deleteCategoryFundsHandler,
+      createCategoryHandler,
+      updateCategoryHandler,
+      archiveCategoryHandler,
+      unarchiveCategoryHandler,
+      updateMemberNameHandler,
+      updateMemberProfileHandler,
+      deleteMemberHandler,
+      createInviteHandler,
+      revokeInviteHandler,
+      updatePushSettingsHandler,
+      resetLedgerToZeroHandler,
+      isFirstTimeIntroCompleted,
+      householdId,
+      syncStatus,
+      lastCloudSync,
+      syncNowHandler,
+      isAccessAllowed,
+      authLoading,
+      accessBlockedReason,
+      isOwner,
+      addAllowedEmailHandler,
+      removeAllowedEmailHandler,
+    ]
   );
 
-  // Sync server API intro status on mount
-  useEffect(() => {
-    if (!householdId) return;
-    fetch(`/api/household/${householdId}/intro-status`)
-      .then(res => res.json())
-      .then(data => {
-        if (data?.isCompleted) {
-          setHousehold(prev => ({
-            ...prev,
-            first_time_intro_completed: true,
-          }));
-          localStorage.setItem('env_budget_first_time_intro_done', 'true');
-          localStorage.setItem('env_budget_tour_completed', 'true');
-        }
-      })
-      .catch(() => {});
-  }, [householdId]);
-
-  const resetLedgerToZero = async (isFirstTimeIntro: boolean = false) => {
-    // 1. Immediately cancel any scheduled background sync to avoid racing with stale state
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    pendingSaveRef.current = false;
-    isRemoteSyncRef.current = true;
-
-    const resetIso = new Date().toISOString();
-    const timeString = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-
-    const customUserName = localStorage.getItem('env_budget_user_name');
-    const currentMembers = customUserName
-      ? members.map(m => (m.user_id === 'usr_me' ? { ...m, name: customUserName } : m))
-      : members;
-
-    const updatedHousehold: Household = {
-      ...household,
-      first_time_intro_completed: true,
-      first_time_intro_completed_at: resetIso,
-      updated_at: resetIso,
-    };
-
-    // 2. Synchronously update latestStateRef so any immediate unload or callback reads the zero state
-    latestStateRef.current = {
-      household: updatedHousehold,
-      members: currentMembers,
-      categories,
-      salaryEvents: [],
-      allocations: [],
-      transactions: [],
-      reconciliations: [],
-      reconciliationLines: [],
-      envelopeTransfers: [],
-      invites: invites || [],
-      householdId,
-      isAccessAllowed: true,
-    };
-
-    // 3. Immediately overwrite localStorage for persistent zero state across reloads
-    try {
-      localStorage.setItem(STORAGE_KEYS.HOUSEHOLD, JSON.stringify(updatedHousehold));
-      localStorage.setItem(STORAGE_KEYS.SALARY_EVENTS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.ALLOCATIONS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.RECONCILIATIONS, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.RECON_LINES, JSON.stringify([]));
-      localStorage.setItem(STORAGE_KEYS.ENVELOPE_TRANSFERS, JSON.stringify([]));
-      localStorage.setItem('env_budget_tour_completed', 'true');
-      localStorage.setItem('env_budget_first_time_intro_done', 'true');
-      localStorage.setItem('env_budget_last_reset_timestamp', resetIso);
-    } catch (e) {
-      console.warn('LocalStorage zero reset note:', e);
-    }
-
-    // 4. Overwrite in-memory React state to zero
-    setHousehold(updatedHousehold);
-    setSalaryEvents([]);
-    setAllocations([]);
-    setTransactions([]);
-    setReconciliations([]);
-    setReconciliationLines([]);
-    setEnvelopeTransfers([]);
-
-    // 5. Mark completion on server API
-    try {
-      fetch(`/api/household/${householdId}/complete-intro`, { method: 'POST' }).catch(() => {});
-    } catch {}
-
-    // 6. Overwrite Firestore document with merge: true to wipe arrays while keeping access rules
-    if (householdId) {
-      try {
-        setSyncStatus('syncing');
-        const docRef = doc(db, 'households', householdId);
-        await setDoc(
-          docRef,
-          {
-            household: {
-              ...updatedHousehold,
-              id: householdId,
-            },
-            owner_email: (updatedHousehold.owner_email || user?.email || '').trim().toLowerCase(),
-            allowed_emails: (updatedHousehold.allowed_emails || []).map((e: string) => e.trim().toLowerCase()),
-            created_by: updatedHousehold.created_by || user?.uid || '',
-            members: currentMembers,
-            categories,
-            salaryEvents: [],
-            allocations: [],
-            transactions: [],
-            reconciliations: [],
-            reconciliationLines: [],
-            envelopeTransfers: [],
-            invites: invites || [],
-            first_time_intro_completed: true,
-            first_time_intro_completed_at: resetIso,
-            lastResetAt: resetIso,
-            lastSyncedAt: timeString,
-            updatedAt: serverTimestamp(),
-            lastUpdatedBy: user?.displayName || user?.email || currentMembers[0]?.user_id || 'usr_me',
-          },
-          { merge: true }
-        );
-        setLastCloudSync(timeString);
-        setSyncStatus('synced');
-      } catch (err) {
-        console.warn('Firestore zero-reset document sync notice:', err);
-        setSyncStatus('offline');
-      } finally {
-        setTimeout(() => {
-          isRemoteSyncRef.current = false;
-        }, 500);
-      }
-    } else {
-      setTimeout(() => {
-        isRemoteSyncRef.current = false;
-      }, 200);
-    }
-  };
-
   return (
-    <BudgetContext.Provider
-      value={{
-        household,
-        members,
-        activeMember,
-        categories,
-        activeCategories,
-        salaryEvents,
-        allocations,
-        transactions,
-        reconciliations,
-        reconciliationLines,
-        envelopeTransfers,
-        invites,
-        selectedMonth,
-        setSelectedMonth,
-        categoryBalances,
-        totalAvailablePaise,
-        totalPendingPaybackPaise,
-        pendingTransfersList,
-        pushSettings,
-        setActiveMemberId,
-        addTransaction,
-        updateTransaction,
-        deleteTransaction,
-        logCorrection,
-        addSalaryAndAllocations,
-        toggleAllocationTransferred,
-        markAllAllocationsTransferred,
-        reconcileCategoryCardSpend,
-        deleteReconciliation,
-        moveEnvelopeFunds,
-        deleteEnvelopeTransfer,
-        addCategoryFunds,
-        deleteCategoryFunds,
-        createCategory,
-        updateCategory,
-        archiveCategory,
-        unarchiveCategory,
-        updateMemberName,
-        updateMemberProfile,
-        deleteMember,
-        createInvite,
-        revokeInvite,
-        updatePushSettings,
-        resetLedgerToZero,
-        isFirstTimeIntroCompleted,
-        householdId,
-        cloudSyncStatus,
-        lastCloudSync,
-        syncNow,
-        isAccessAllowed,
-        authLoading,
-        accessBlockedReason,
-        isOwner,
-        addAllowedEmail,
-        removeAllowedEmail,
-      }}
-    >
+    <BudgetContext.Provider value={contextValue}>
       {children}
     </BudgetContext.Provider>
   );
 };
 
-export function useBudget(): BudgetContextType {
+export const BudgetProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  return (
+    <Provider store={store}>
+      <BudgetProviderContent>{children}</BudgetProviderContent>
+    </Provider>
+  );
+};
+
+export const useBudget = (): BudgetContextType => {
   const context = useContext(BudgetContext);
   if (!context) {
     throw new Error('useBudget must be used within a BudgetProvider');
   }
   return context;
-}
+};
