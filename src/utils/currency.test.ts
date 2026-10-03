@@ -4,6 +4,7 @@ import {
   paiseToRupees,
   formatPaise,
   paiseToInputString,
+  paiseToWords,
 } from './currency';
 
 describe('Integer Paise Currency Unit Tests', () => {
@@ -53,6 +54,22 @@ describe('Integer Paise Currency Unit Tests', () => {
       expect(paiseToInputString(0)).toBe('');
       expect(paiseToInputString(150000)).toBe('1500');
       expect(paiseToInputString(125050)).toBe('1250.50');
+    });
+  });
+
+  describe('paiseToWords', () => {
+    it('converts common rupee amounts into Indian English words with only suffix', () => {
+      expect(paiseToWords(15000000)).toBe('One lakh fifty thousand rupees only');
+      expect(paiseToWords(1000000000)).toBe('One crore rupees only');
+      expect(paiseToWords(50000)).toBe('Five hundred rupees only');
+      expect(paiseToWords(100)).toBe('One rupee only');
+      expect(paiseToWords(0)).toBe('Zero rupees');
+    });
+
+    it('handles paise fractions and negative amounts', () => {
+      expect(paiseToWords(245050)).toBe('Two thousand four hundred fifty rupees and fifty paise');
+      expect(paiseToWords(50)).toBe('Fifty paise');
+      expect(paiseToWords(-150000)).toBe('Minus One thousand five hundred rupees only');
     });
   });
 });

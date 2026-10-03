@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
+import { usePwaInstall } from '../hooks/usePwaInstall';
+import { APP_VERSION } from '../App';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
-import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen } from 'lucide-react';
+import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen, Download, Smartphone } from 'lucide-react';
 import { ResetDataWarningModal } from './ResetDataWarningModal';
 
 interface SettingsTabProps {
@@ -24,6 +26,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 }) => {
   const { user, householdId } = useAuth();
   const [isResetZeroModalOpen, setIsResetZeroModalOpen] = useState(false);
+  const { isInstallable, isInstalled, triggerInstall } = usePwaInstall();
   const {
     household,
     members,
@@ -286,6 +289,42 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
+      {/* PWA Install & Device App Section */}
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#4E785E]/15 text-[#4E785E] flex items-center justify-center shrink-0">
+            <Smartphone className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-1.5">
+              <span>Install Web App (PWA)</span>
+              {isInstalled && (
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#4E785E]/15 text-[#4E785E]">
+                  Installed
+                </span>
+              )}
+            </h3>
+            <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5">
+              {isInstalled
+                ? 'App is installed on your device with offline support and home screen icon.'
+                : 'Add to your phone or desktop home screen for full-screen offline access.'}
+            </p>
+          </div>
+        </div>
+
+        {!isInstalled && (
+          <button
+            type="button"
+            onClick={triggerInstall}
+            id="install-pwa-btn"
+            className="px-4 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity cursor-pointer shrink-0"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Install App</span>
+          </button>
+        )}
+      </div>
+
       {/* Danger Zone: Reset Data */}
       <div className="pt-2 flex flex-col items-start gap-3">
         <div className="flex flex-col items-start">
@@ -328,6 +367,14 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           'Ready immediately for your real salary allocation',
         ]}
       />
+
+      {/* App Version Info inside Settings at bottom */}
+      <div className="pt-6 mt-4 border-t border-[#E8E3DA] dark:border-[#2D2823] flex items-center justify-between text-xs text-[#78716C] dark:text-[#A8A29E]">
+        <span>Envelope Budgeting</span>
+        <span className="font-mono text-[11px] font-semibold text-[#78716C] dark:text-[#A8A29E] bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 px-2.5 py-1 rounded-lg border border-[#E8E3DA] dark:border-[#2D2823]">
+          Version: {APP_VERSION}
+        </span>
+      </div>
     </div>
   );
 };

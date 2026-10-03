@@ -88,6 +88,12 @@ export const selectCategoryBalances = createSelector(
           return item.availableNow !== 0 || item.pendingCardDebt > 0;
         }
         return true;
+      })
+      .sort((a, b) => {
+        // Unallocated envelope always appears last
+        if (a.category.is_unallocated && !b.category.is_unallocated) return 1;
+        if (!a.category.is_unallocated && b.category.is_unallocated) return -1;
+        return 0;
       });
   }
 );

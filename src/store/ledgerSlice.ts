@@ -28,8 +28,16 @@ const initialPushSettings: PushSubscriptionSetting = {
   created_at: new Date().toISOString(),
 };
 
+export function sanitizeHousehold(hh: Household): Household {
+  const name = (hh.name || '').trim();
+  if (!name || /preview/i.test(name) || name === 'Our Household Ledger' || name.toLowerCase() === 'preview ledger') {
+    return { ...hh, name: 'Family Budget' };
+  }
+  return hh;
+}
+
 const initialState: LedgerState = {
-  household: INITIAL_HOUSEHOLD,
+  household: sanitizeHousehold(INITIAL_HOUSEHOLD),
   members: INITIAL_MEMBERS,
   categories: INITIAL_CATEGORIES,
   salaryEvents: [],
@@ -61,7 +69,7 @@ export const ledgerSlice = createSlice({
       state.householdId = action.payload;
     },
     setHousehold: (state, action: PayloadAction<Household>) => {
-      state.household = action.payload;
+      state.household = sanitizeHousehold(action.payload);
       if (action.payload.first_time_intro_completed) {
         state.firstTimeIntroCompleted = true;
       }
@@ -88,7 +96,7 @@ export const ledgerSlice = createSlice({
     // Cache / LocalStorage Hydration
     hydrateFromStorage: (state, action: PayloadAction<Partial<LedgerState>>) => {
       const data = action.payload;
-      if (data.household) state.household = data.household;
+      if (data.household) state.household = sanitizeHousehold(data.household);
       if (data.members) state.members = data.members;
       if (data.categories) state.categories = data.categories;
       if (data.salaryEvents) state.salaryEvents = data.salaryEvents;
@@ -110,7 +118,7 @@ export const ledgerSlice = createSlice({
       if (!data) return;
 
       if (data.household) {
-        state.household = data.household;
+        state.household = sanitizeHousehold(data.household);
       }
       if (Array.isArray(data.categories)) {
         state.categories = data.categories;
@@ -650,6 +658,7 @@ export const ledgerSlice = createSlice({
       // 2. Mark intro completed & set timestamps
       state.firstTimeIntroCompleted = true;
       state.lastResetAt = resetIso;
+      state.household.name = 'Family Budget';
       state.household.first_time_intro_completed = true;
       state.household.first_time_intro_completed_at = resetIso;
       state.household.updated_at = resetIso;

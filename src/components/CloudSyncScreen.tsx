@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 import { useApiLoading } from '../context/ApiLoadingContext';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
+import { ResetDataWarningModal } from './ResetDataWarningModal';
 import {
   Cloud,
   CheckCircle2,
@@ -20,6 +21,7 @@ import {
   ArrowLeft,
   Database,
   Lock,
+  RotateCcw,
 } from 'lucide-react';
 
 interface CloudSyncScreenProps {
@@ -32,7 +34,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
   onNavigateToInvite,
 }) => {
   const { user, signInWithGoogle, logout, householdId, setHouseholdId, authError } = useAuth();
-  const { cloudSyncStatus, lastCloudSync, syncNow, household } = useBudget();
+  const { cloudSyncStatus, lastCloudSync, syncNow, household, resetLedgerToZero } = useBudget();
   const { startApiCall, showToast } = useApiLoading();
   const [customHouseholdId, setCustomHouseholdId] = useState('');
   const [copied, setCopied] = useState(false);
@@ -40,6 +42,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSyncingManually, setIsSyncingManually] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isResetCleanModalOpen, setIsResetCleanModalOpen] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -131,7 +134,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
                 Cloud & Cross-Device Sync
               </h1>
             </div>
-            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1 pl-10.5">
+            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1">
               Real-time multi-device ledger mirroring powered by Google Firebase Firestore
             </p>
           </div>
@@ -364,7 +367,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
 
       {/* Google Account Allowlist & Access Control */}
       <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs">
-        <HouseholdAccessManager compact={false} />
+        <HouseholdAccessManager compact={true} />
       </div>
 
       {/* Advanced Household Management */}
@@ -395,6 +398,48 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
           </button>
         </form>
       </div>
+
+      {/* Clear Firebase Cloud Store & Start Clean */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-[#B85D43] flex items-center gap-1.5">
+            <RotateCcw className="w-4 h-4 text-[#B85D43]" />
+            <span>Clear Firebase Cloud Store & Start Clean</span>
+          </h2>
+          <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-0.5">
+            Wipes all transactions, salary arrivals, and balances from both Cloud Firestore and local storage so you can start fresh with ₹0.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setIsResetCleanModalOpen(true)}
+          id="clear-cloud-store-btn"
+          className="px-4 py-2 rounded-xl bg-[#B85D43] hover:bg-[#A04D35] text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Clear Cloud & Reset (₹0)</span>
+        </button>
+      </div>
+
+      <ResetDataWarningModal
+        isOpen={isResetCleanModalOpen}
+        onClose={() => setIsResetCleanModalOpen(false)}
+        onConfirm={async () => {
+          await resetLedgerToZero(false);
+          showToast('Cloud store and local ledger cleared to ₹0', 'success');
+        }}
+        title="Clear Cloud Database & Start Clean?"
+        description="This will permanently reset all transactions, envelope balances, and credit card debts to ₹0 in Firebase Firestore and locally. Your envelope categories and Google account permissions remain intact."
+        confirmText="Yes, Clear Cloud Store"
+        isZeroReset={true}
+        bulletPoints={[
+          'All envelope balances reset to ₹0 available',
+          'All transaction and salary histories wiped from Firebase Firestore',
+          'Pending credit card payback reset to ₹0',
+          'Ready immediately for your fresh real salary allocation',
+        ]}
+      />
 
       {/* Multi-Device Architecture Notes */}
       <div className="p-4 rounded-2xl bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 border border-[#E8E3DA] dark:border-[#2D2823] grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[#78716C] dark:text-[#A8A29E]">

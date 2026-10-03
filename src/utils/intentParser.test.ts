@@ -49,4 +49,14 @@ describe('Voice & Natural Language Intent Parser Unit Tests', () => {
     expect(res.amountInPaise).toBe(300000);
     expect(res.categoryName).toBe('Groceries');
   });
+
+  it('identifies random speech and unrecognized intents as unknown', () => {
+    const resHello = parseIntentWithLocalRules('Hello how are you doing', availableCategories);
+    expect(resHello.intent).toBe('unknown');
+    expect(resHello.amountInPaise).toBe(0);
+
+    const resNoise = parseIntentWithLocalRules('testing mic check one two three', availableCategories);
+    expect(resNoise.intent).toBe('unknown');
+    expect(resNoise.amountInPaise).toBe(0);
+  });
 });

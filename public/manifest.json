@@ -1,0 +1,19 @@
+{
+  "name": "Envelope Budgeting",
+  "short_name": "Envelopes",
+  "description": "Shared household envelope budgeting and credit card reconciliation ledger in INR (paise).",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#1F1B16",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "productivity", "utilities"]
+}

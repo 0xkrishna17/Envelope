@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
 export interface ParsedVoiceIntent {
-  intent: 'add_transaction' | 'mark_salary_arrived' | 'mark_reconciled' | 'query_balance' | 'move_funds';
+  intent: 'add_transaction' | 'mark_salary_arrived' | 'mark_reconciled' | 'query_balance' | 'move_funds' | 'unknown';
   amountInPaise: number;
   categoryName?: string;
   fromCategoryName?: string;
@@ -65,12 +65,21 @@ export function validateAndClampResult(
     'mark_reconciled',
     'query_balance',
     'move_funds',
+    'unknown',
   ] as const;
 
   const rawIntent = String(data?.intent || 'add_transaction');
   const intent = (allowedIntents.includes(rawIntent as any)
     ? rawIntent
     : 'add_transaction') as ParsedVoiceIntent['intent'];
+
+  if (intent === 'unknown') {
+    return {
+      intent: 'unknown',
+      amountInPaise: 0,
+      summaryExplanation: 'No budgeting expense or action recognized.',
+    };
+  }
 
   let amountInPaise = Number(data?.amountInPaise);
   if (isNaN(amountInPaise) || !isFinite(amountInPaise)) {
@@ -275,6 +284,15 @@ export function parseIntentWithLocalRules(
     );
   }
 
+  // Check if unidentified voice intent (no financial action/amount detected)
+  if (amountPaise === 0 && matchedCategories.length === 0) {
+    return {
+      intent: 'unknown',
+      amountInPaise: 0,
+      summaryExplanation: 'Could not identify a budgeting action or expense. Please speak clearly, e.g. "Spent 450 on Groceries with UPI".',
+    };
+  }
+
   // Default intent: Add Transaction (Spend)
   const targetCategory =
     matchedCategories[0] || (safeCats.length > 0 ? safeCats[0] : 'Groceries');
@@ -380,6 +398,7 @@ ${sanitizedText}
             'mark_reconciled',
             'query_balance',
             'move_funds',
+            'unknown',
           ],
         },
         amountInPaise: { type: Type.INTEGER },

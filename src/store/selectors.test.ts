@@ -120,6 +120,18 @@ describe('Redux Selectors Unit Tests', () => {
       expect(dine?.availableNow).toBe(300000); // 5,000 (transferred only) - 2,000 = 3,000
       expect(dine?.pendingCardDebt).toBe(200000); // ₹2,000 unreconciled CC debt
     });
+
+    it('always sorts the unallocated category to the very last position', () => {
+      const state = createMockRootState();
+      const balances = selectCategoryBalances(state);
+      expect(balances.length).toBeGreaterThan(1);
+      const lastItem = balances[balances.length - 1];
+      expect(lastItem.category.is_unallocated).toBe(true);
+
+      // Verify no earlier item is unallocated
+      const otherItems = balances.slice(0, -1);
+      expect(otherItems.every(b => !b.category.is_unallocated)).toBe(true);
+    });
   });
 
   describe('selectTotalAvailablePaise and selectTotalPendingPaybackPaise', () => {

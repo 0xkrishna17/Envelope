@@ -22,13 +22,15 @@ import { FloatingNavMenu } from './components/FloatingNavMenu';
 import { ProfileScreen } from './components/ProfileModal';
 import { AppTourGuide } from './components/AppTourGuide';
 import { AccessDeniedGate } from './components/AccessDeniedGate';
+import { InstallAppModal } from './components/InstallAppModal';
+import { usePwaInstall } from './hooks/usePwaInstall';
 import { ApiLoadingProvider } from './context/ApiLoadingContext';
-import { formatPaise } from './utils/currency';
+import { formatPaise, paiseToWords } from './utils/currency';
 import { Transaction, ActiveTab } from './types';
 import { Plus, PlusCircle, Wallet, RefreshCw, Layers, ShieldCheck, ArrowRight, ArrowLeftRight, Settings, CheckCircle2, X, User, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // App version as instructed by user: "lets add version no of app and with each iteration lets keep increasing version no at bottom right in small text."
-export const APP_VERSION = 'v1.4.33';
+export const APP_VERSION = 'v1.4.36';
 
 function BudgetAppContent() {
   const {
@@ -43,6 +45,9 @@ function BudgetAppContent() {
     isAccessAllowed,
     syncNow,
   } = useBudget();
+
+  const { isInstalled, showInstallGuide, triggerInstall, closeInstallGuide, hasNativePrompt } = usePwaInstall();
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   const { user, loading: authLoading, setHouseholdId } = useAuth();
   const [partnerConnectedBanner, setPartnerConnectedBanner] = useState<string | null>(null);
@@ -209,9 +214,6 @@ function BudgetAppContent() {
             <AccessDeniedGate onCheckAgain={syncNow} />
           )}
         </main>
-        <div className="fixed bottom-1.5 right-2 text-[9px] font-mono text-[#78716C]/40 dark:text-[#A8A29E]/40 pointer-events-none select-none z-30">
-          {APP_VERSION}
-        </div>
       </div>
     );
   }
@@ -360,10 +362,10 @@ function BudgetAppContent() {
           <>
             {activeTab === 'envelopes' && (
               <div className="flex flex-col gap-5 animate-in fade-in pb-20">
-                {/* Top Aggregate Summary Cards (§4.6: Compact on mobile) */}
-                <div id="top-summary-cards" className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
-                  {/* Card 1: Total In Envelopes (Full width on mobile, 1 col on sm) */}
-                  <div className="col-span-2 sm:col-span-1 p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col justify-between">
+                {/* Top Aggregate Summary Cards (§4.6: 2 clean cards) */}
+                <div id="top-summary-cards" className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                  {/* Card 1: Total In Envelopes */}
+                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col justify-between">
                     <div>
                       <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1 sm:gap-1.5">
                         <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4E785E]" />
@@ -372,8 +374,12 @@ function BudgetAppContent() {
                       <div className="text-xl sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#1F1B16] dark:text-[#EDE8E1]">
                         {formatPaise(totalAvailablePaise)}
                       </div>
+                      {/* Amount in words for total in small fonts */}
+                      <p className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5 leading-snug line-clamp-1 italic">
+                        {paiseToWords(totalAvailablePaise)}
+                      </p>
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1 sm:mt-2 truncate">
+                    <div className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-2 truncate">
                       Across {categories.filter(c => !c.deleted_at && !c.is_archived).length} envelopes
                     </div>
                   </div>
@@ -382,7 +388,7 @@ function BudgetAppContent() {
                   <div
                     onClick={() => handleOpenReconcileCategory()}
                     id="pending-card-summary-card"
-                    className={`p-2.5 sm:p-4 rounded-xl sm:rounded-2xl border transition-all cursor-pointer shadow-xs flex flex-col justify-between ${
+                    className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all cursor-pointer shadow-xs flex flex-col justify-between ${
                       totalPendingPaybackPaise > 0
                         ? 'bg-[#F9ECE8]/80 dark:bg-[#331D16]/80 border-[#E8C5BC] dark:border-[#5E261B] hover:border-[#B85D43]'
                         : 'bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border-[#E8E3DA] dark:border-[#2D2823]'
@@ -400,11 +406,16 @@ function BudgetAppContent() {
                           </span>
                         )}
                       </span>
-                      <div className="text-lg sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#87341D] dark:text-[#F3B3A2]">
+                      <div className="text-xl sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#87341D] dark:text-[#F3B3A2]">
                         {formatPaise(totalPendingPaybackPaise)}
                       </div>
+                      {totalPendingPaybackPaise > 0 && (
+                        <p className="text-[10px] sm:text-[11px] text-[#87341D]/80 dark:text-[#F3B3A2]/80 mt-0.5 leading-snug line-clamp-1 italic">
+                          {paiseToWords(totalPendingPaybackPaise)}
+                        </p>
+                      )}
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1 sm:mt-2 flex items-center justify-between truncate">
+                    <div className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-2 flex items-center justify-between truncate">
                       <span className="truncate">
                         {totalPendingPaybackPaise > 0
                           ? 'Move to Salary'
@@ -413,30 +424,6 @@ function BudgetAppContent() {
                       {totalPendingPaybackPaise === 0 && (
                         <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4E785E]" />
                       )}
-                    </div>
-                  </div>
-
-                  {/* Card 3: Unallocated Surplus Reserve */}
-                  <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col justify-between">
-                    <div>
-                      <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1 sm:gap-1.5">
-                        <Layers className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#78716C]" />
-                        Unallocated Surplus
-                      </span>
-                      <div className="text-lg sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#1F1B16] dark:text-[#EDE8E1]">
-                        {formatPaise(unallocatedBalance)}
-                      </div>
-                    </div>
-                    <div className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1 sm:mt-2 flex items-center justify-between truncate">
-                      <span>Surplus</span>
-                      <button
-                        onClick={() => handleOpenMoveFunds(categories.find(c => c.is_unallocated)?.id)}
-                        id="assign-surplus-btn"
-                        className="text-[10px] sm:text-[11px] font-semibold text-[#486B88] hover:underline flex items-center gap-0.5 cursor-pointer ml-1"
-                      >
-                        <span>Move</span>
-                        <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -601,7 +588,20 @@ function BudgetAppContent() {
         onOpenMoveFundsModal={handleOpenMoveFunds}
         onOpenSalaryModal={() => setCurrentScreen({ type: 'salary-arrival' })}
         onOpenAddFundsModal={() => handleOpenAddFunds()}
+        onOpenProfileModal={() => setCurrentScreen({ type: 'profile', isOnboarding: false })}
         onOpenTour={handleOpenTourSafely}
+        onOpenInstallModal={() => setIsInstallModalOpen(true)}
+      />
+
+      {/* Progressive Web App Install Modal */}
+      <InstallAppModal
+        isOpen={isInstallModalOpen || showInstallGuide}
+        onClose={() => {
+          setIsInstallModalOpen(false);
+          closeInstallGuide();
+        }}
+        onNativeInstall={triggerInstall}
+        hasNativePrompt={hasNativePrompt}
       />
 
       {/* Interactive Onboarding Tour & Nomenclature Walkthrough */}
@@ -615,11 +615,6 @@ function BudgetAppContent() {
           await resetLedgerToZero(true);
         }}
       />
-
-      {/* Small version tag at bottom right */}
-      <div className="fixed bottom-1.5 right-2 text-[9px] font-mono text-[#78716C]/40 dark:text-[#A8A29E]/40 pointer-events-none select-none z-30">
-        {APP_VERSION}
-      </div>
     </div>
   );
 }

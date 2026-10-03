@@ -218,9 +218,15 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       const lastReset = localStorage.getItem('env_budget_last_reset_timestamp');
       const introDone = localStorage.getItem('env_budget_first_time_intro_done') === 'true';
 
+      let parsedHh = savedHh ? JSON.parse(savedHh) : undefined;
+      if (parsedHh && (!parsedHh.name || /preview/i.test(parsedHh.name) || parsedHh.name === 'Our Household Ledger' || parsedHh.name.toLowerCase() === 'preview ledger')) {
+        parsedHh = { ...parsedHh, name: 'Family Budget' };
+        localStorage.setItem(STORAGE_KEYS.HOUSEHOLD, JSON.stringify(parsedHh));
+      }
+
       dispatch(
         ledgerActions.hydrateFromStorage({
-          household: savedHh ? JSON.parse(savedHh) : undefined,
+          household: parsedHh,
           categories: savedCats ? JSON.parse(savedCats) : undefined,
           salaryEvents: savedSal ? JSON.parse(savedSal) : undefined,
           allocations: savedAllocs ? JSON.parse(savedAllocs) : undefined,

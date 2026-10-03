@@ -11,6 +11,9 @@ import {
   ShieldCheck,
   Mic,
   BookOpen,
+  User,
+  Download,
+  Smartphone,
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
@@ -22,7 +25,9 @@ interface FloatingNavMenuProps {
   onOpenMoveFundsModal: () => void;
   onOpenSalaryModal: () => void;
   onOpenAddFundsModal: () => void;
+  onOpenProfileModal?: () => void;
   onOpenTour?: () => void;
+  onOpenInstallModal?: () => void;
 }
 
 export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
@@ -32,10 +37,12 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
   onOpenMoveFundsModal,
   onOpenSalaryModal,
   onOpenAddFundsModal,
+  onOpenProfileModal,
   onOpenTour,
+  onOpenInstallModal,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const { totalPendingPaybackPaise } = useBudget();
+  const { totalPendingPaybackPaise, activeMember } = useBudget();
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside or pressing Escape
@@ -156,6 +163,34 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
               <span className="text-[10px] text-[#78716C]">Non-salary</span>
             </button>
 
+            {onOpenProfileModal && (
+              <button
+                onClick={() => handleAction(onOpenProfileModal)}
+                id="floating-action-profile"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-medium transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  {activeMember.avatar_url ? (
+                    <img
+                      src={activeMember.avatar_url}
+                      alt={activeMember.name}
+                      referrerPolicy="no-referrer"
+                      className="w-4 h-4 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <div
+                      style={{ backgroundColor: activeMember.avatar_color }}
+                      className="w-4 h-4 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
+                    >
+                      {activeMember.name.charAt(0)}
+                    </div>
+                  )}
+                  <span>Profile ({activeMember.name})</span>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-[#78716C]" />
+              </button>
+            )}
+
             {onOpenTour && (
               <button
                 onClick={() => handleAction(onOpenTour)}
@@ -167,6 +202,22 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
                   <span>Interactive Guide & Rules</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-[#78716C]" />
+              </button>
+            )}
+
+            {onOpenInstallModal && (
+              <button
+                onClick={() => handleAction(onOpenInstallModal)}
+                id="floating-action-install-pwa"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#4E785E]/30 bg-[#4E785E]/10 hover:bg-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7] text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Download className="w-3.5 h-3.5 text-[#4E785E]" />
+                  <span>Install Web App (PWA)</span>
+                </div>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#4E785E]/20 text-[#4E785E]">
+                  Offline
+                </span>
               </button>
             )}
           </div>

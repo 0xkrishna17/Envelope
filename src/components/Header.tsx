@@ -52,9 +52,20 @@ export const Header: React.FC<HeaderProps> = ({
     setActiveMemberId,
     totalPendingPaybackPaise,
     cloudSyncStatus,
+    syncNow,
   } = useBudget();
 
+  const rawHouseholdName = (household?.name || '').trim();
+  const cleanHouseholdName =
+    !rawHouseholdName ||
+    /preview/i.test(rawHouseholdName) ||
+    rawHouseholdName === 'Our Household Ledger' ||
+    rawHouseholdName.toLowerCase() === 'preview ledger'
+      ? 'Family Budget'
+      : rawHouseholdName;
+
   const handleOpenSync = () => {
+    syncNow().catch(() => {});
     setActiveTab('sync');
   };
 
@@ -82,7 +93,7 @@ export const Header: React.FC<HeaderProps> = ({
                 Envelope Budgeting
               </h1>
               <p className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] font-medium truncate">
-                {household.name}
+                {cleanHouseholdName}
               </p>
             </div>
           </div>
@@ -128,33 +139,6 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'bg-[#AF7832]'
                 }`}
               />
-            </button>
-
-            {/* Member Profile & Photo Trigger */}
-            <button
-              onClick={onOpenProfileModal}
-              id="header-profile-btn"
-              title={`Profile: ${activeMember.name} (${activeMember.role}) - Tap to update photo & name`}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-xs transition-colors cursor-pointer shrink-0"
-            >
-              {activeMember.avatar_url ? (
-                <img
-                  src={activeMember.avatar_url}
-                  alt={activeMember.name}
-                  referrerPolicy="no-referrer"
-                  className="w-4 h-4 rounded-full object-cover shrink-0"
-                />
-              ) : (
-                <span
-                  style={{ backgroundColor: activeMember.avatar_color }}
-                  className="w-4 h-4 rounded-full text-white text-[10px] font-bold flex items-center justify-center leading-none shrink-0"
-                >
-                  {activeMember.name.charAt(0)}
-                </span>
-              )}
-              <span className="font-medium text-[11px] max-w-[65px] sm:max-w-[90px] truncate">
-                {activeMember.name}
-              </span>
             </button>
 
             {/* Daily Reminder Settings (§4.5) */}

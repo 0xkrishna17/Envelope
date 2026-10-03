@@ -99,12 +99,12 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
         </div>
       )}
 
-      {/* List of Allowed Emails */}
-      <div className="space-y-1.5 pt-1">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] block">
-          Authorized Accounts
+      {/* Unified Authorized Accounts & Add Input Box */}
+      <div className="pt-1">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] block mb-1.5">
+          Authorized Accounts & Access
         </span>
-        <div className="divide-y divide-[#E8E3DA]/60 dark:divide-[#2D2823]/60 rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-white/50 dark:bg-[#141210]/50 overflow-hidden">
+        <div className="rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-white/60 dark:bg-[#141210]/60 overflow-hidden divide-y divide-[#E8E3DA]/60 dark:divide-[#2D2823]/60">
           {allowedEmails.map(email => {
             const isHouseholdOwner = email === ownerEmail;
             const isCurrentUser = user?.email?.toLowerCase() === email;
@@ -171,35 +171,30 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
               </div>
             );
           })}
-        </div>
-      </div>
 
-      {/* Add Partner Form */}
-      <form onSubmit={handleAdd} className="pt-2 space-y-1.5">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] block">
-          Add Partner Google Email
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="email"
-            value={newEmail}
-            onChange={e => setNewEmail(e.target.value)}
-            placeholder="e.g. spouse@gmail.com"
-            className="flex-1 px-3 py-1.5 rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#141210] text-xs text-[#1F1B16] dark:text-[#EDE8E1] outline-none placeholder-[#A8A29E]"
-          />
-          <button
-            type="submit"
-            disabled={!newEmail.trim() || isSubmitting}
-            className="px-3.5 py-1.5 rounded-xl bg-[#4E785E] text-white font-medium text-xs hover:bg-[#436851] transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{isSubmitting ? 'Adding...' : 'Add'}</span>
-          </button>
+          {/* Integrated Add Email Row inside the same unified box */}
+          <form onSubmit={handleAdd} className="p-2 sm:p-2.5 bg-[#FAF7F2]/60 dark:bg-[#1A1714]/60 flex items-center gap-2">
+            <input
+              type="email"
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              placeholder="Add partner Google email (e.g. spouse@gmail.com)"
+              className="flex-1 px-3 py-1.5 bg-white dark:bg-[#141210] rounded-lg text-xs text-[#1F1B16] dark:text-[#EDE8E1] border border-[#E8E3DA] dark:border-[#2D2823] outline-none placeholder-[#A8A29E]"
+            />
+            <button
+              type="submit"
+              disabled={!newEmail.trim() || isSubmitting}
+              className="px-3.5 py-1.5 rounded-lg bg-[#4E785E] text-white font-medium text-xs hover:bg-[#436851] transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40 shrink-0"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{isSubmitting ? 'Adding...' : 'Add Partner'}</span>
+            </button>
+          </form>
         </div>
-        <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] leading-relaxed pt-0.5">
+        <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] leading-relaxed pt-1.5">
           Tip: When your partner logs in with this Google email, they will instantly see the same envelopes, balances, and ledger in real time.
         </p>
-      </form>
+      </div>
     </div>
   );
 };

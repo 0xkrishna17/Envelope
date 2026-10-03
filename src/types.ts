@@ -144,7 +144,7 @@ export interface EnvelopeTransfer {
 }
 
 export interface ParsedVoiceIntent {
-  intent: 'add_transaction' | 'mark_salary_arrived' | 'mark_reconciled' | 'query_balance' | 'move_funds' | 'topup_category';
+  intent: 'add_transaction' | 'mark_salary_arrived' | 'mark_reconciled' | 'query_balance' | 'move_funds' | 'topup_category' | 'unknown';
   amountInPaise: number;
   categoryName?: string;
   fromCategoryName?: string;

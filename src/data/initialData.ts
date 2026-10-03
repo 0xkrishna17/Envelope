@@ -2,7 +2,7 @@ import { Household, Membership, Category, SalaryEvent, Allocation, Transaction, 
 
 export const INITIAL_HOUSEHOLD: Household = {
   id: 'hh_main',
-  name: 'Our Household Ledger',
+  name: 'Family Budget',
   created_by: 'usr_me',
   created_at: '2026-08-01T00:00:00Z',
   updated_at: '2026-08-01T00:00:00Z',

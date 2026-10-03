@@ -131,7 +131,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
               Cloud & Cross-Device Sync
             </h2>
           </div>
-          <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5 pl-9">
+          <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1">
             Powered by Google Firebase Firestore
           </p>
         </div>

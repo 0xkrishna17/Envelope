@@ -259,14 +259,14 @@ export const HouseholdInviteScreen: React.FC<HouseholdInviteScreenProps> = ({
 
           <div className="mt-3 pt-2.5 border-t border-[#E8E3DA] dark:border-[#2D2823] flex items-center gap-1.5 text-[11px] text-[#4E785E] font-medium">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Zero account setup needed to preview</span>
+            <span>Instant co-budgeting without manual setup</span>
           </div>
         </div>
       </div>
 
       {/* Google Account Allowlist & Access Control */}
       <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs">
-        <HouseholdAccessManager compact={false} />
+        <HouseholdAccessManager compact={true} />
       </div>
 
       {/* Connected Household Members */}

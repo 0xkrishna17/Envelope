@@ -590,101 +590,135 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
           )}
 
           {/* Parsed Result & Mandatory Confirm Screen (§4.9) */}
-          {parsedResult && (
-            <div className="p-4 rounded-xl bg-[#EBF2ED] dark:bg-[#1E2E24] border border-[#CADBCE] dark:border-[#2C4A36] flex flex-col gap-3 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-wider font-semibold text-[#2C523B] dark:text-[#A8D1B7]">
-                  Parsed Intent Confirmation (§4.9)
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/70 dark:bg-black/30 font-medium text-[#2C523B] dark:text-[#A8D1B7] flex items-center gap-1">
-                    <Zap className="w-2.5 h-2.5 text-[#B85D43]" />
-                    {parsedModelUsed === 'gemini-3.1-flash-lite' ? 'Gemini Flash Lite' : (parsedModelUsed || 'Gemini Flash Lite')}
+          {parsedResult && (() => {
+            const isUnidentified =
+              parsedResult.intent === 'unknown' ||
+              (parsedResult.intent === 'add_transaction' && parsedResult.amountInPaise <= 0);
+
+            if (isUnidentified) {
+              return (
+                <div className="p-4 rounded-xl bg-[#EFEAE1]/70 dark:bg-[#28221D]/70 border border-[#E8E3DA] dark:border-[#2D2823] flex flex-col gap-2 text-xs text-[#78716C] dark:text-[#A8A29E] animate-in fade-in">
+                  <div className="flex items-center gap-2 text-[#AF7832]">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span className="font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+                      Unidentified Intent — Entry Card Ignored
+                    </span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    {parsedResult.summaryExplanation || 'Could not detect an amount or envelope from your speech. No transaction entry card was created.'}
+                  </p>
+                  <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E]">
+                    Try speaking clearly, for example: <strong className="text-[#486B88]">"Spent 450 on Groceries with UPI"</strong> or <strong className="text-[#486B88]">"Move 1500 from Groceries to Dining"</strong>.
+                  </p>
+                  <div className="pt-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setParsedResult(null)}
+                      className="px-3 py-1 rounded-lg border border-[#DCD5C9] text-[11px] font-medium hover:bg-black/5 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="p-4 rounded-xl bg-[#EBF2ED] dark:bg-[#1E2E24] border border-[#CADBCE] dark:border-[#2C4A36] flex flex-col gap-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-wider font-semibold text-[#2C523B] dark:text-[#A8D1B7]">
+                    Parsed Intent Confirmation (§4.9)
                   </span>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-white/70 dark:bg-black/30 font-medium">
-                    {parsedResult.intent.replace(/_/g, ' ')}
-                  </span>
-                </div>
-              </div>
-
-              <div className="text-xs text-[#1F1B16] dark:text-[#EDE8E1]">
-                {parsedResult.summaryExplanation}
-              </div>
-
-              {parsedResult.intent === 'add_transaction' && (
-                <div className="grid grid-cols-2 gap-2 text-xs bg-white/60 dark:bg-black/20 p-2.5 rounded-lg">
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">Amount:</span>
-                    <strong className="font-amount font-semibold text-sm">
-                      {formatPaise(parsedResult.amountInPaise)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">Envelope:</span>
-                    <strong className="font-medium truncate block">
-                      {parsedResult.categoryName || 'General'}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">Method:</span>
-                    <span className="capitalize">{parsedResult.paymentMethod?.replace(/_/g, ' ')}</span>
-                  </div>
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">Note:</span>
-                    <span className="truncate block">{parsedResult.note || 'None'}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/70 dark:bg-black/30 font-medium text-[#2C523B] dark:text-[#A8D1B7] flex items-center gap-1">
+                      <Zap className="w-2.5 h-2.5 text-[#B85D43]" />
+                      {parsedModelUsed === 'gemini-3.1-flash-lite' ? 'Gemini Flash Lite' : (parsedModelUsed || 'Gemini Flash Lite')}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/70 dark:bg-black/30 font-medium">
+                      {parsedResult.intent.replace(/_/g, ' ')}
+                    </span>
                   </div>
                 </div>
-              )}
 
-              {parsedResult.intent === 'move_funds' && (
-                <div className="grid grid-cols-2 gap-2 text-xs bg-white/60 dark:bg-black/20 p-2.5 rounded-lg">
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">Amount:</span>
-                    <strong className="font-amount font-semibold text-sm text-[#486B88]">
-                      {formatPaise(parsedResult.amountInPaise)}
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">Action:</span>
-                    <strong className="font-medium truncate block text-[#486B88]">
-                      Move Envelope Funds
-                    </strong>
-                  </div>
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">From Envelope:</span>
-                    <strong className="truncate block">{parsedResult.fromCategoryName || 'Source'}</strong>
-                  </div>
-                  <div>
-                    <span className="text-[#78716C] block text-[10px]">To Envelope:</span>
-                    <strong className="truncate block">{parsedResult.toCategoryName || 'Destination'}</strong>
-                  </div>
+                <div className="text-xs text-[#1F1B16] dark:text-[#EDE8E1]">
+                  {parsedResult.summaryExplanation}
                 </div>
-              )}
 
-              <p className="text-[10px] text-[#2C523B] dark:text-[#A8D1B7]">
-                Requires confirmation before writing to ledger.
-              </p>
+                {parsedResult.intent === 'add_transaction' && (
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-white/60 dark:bg-black/20 p-2.5 rounded-lg">
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Amount:</span>
+                      <strong className="font-amount font-semibold text-sm">
+                        {formatPaise(parsedResult.amountInPaise)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Envelope:</span>
+                      <strong className="font-medium truncate block">
+                        {parsedResult.categoryName || 'General'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Method:</span>
+                      <span className="capitalize">{parsedResult.paymentMethod?.replace(/_/g, ' ')}</span>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Note:</span>
+                      <span className="truncate block">{parsedResult.note || 'None'}</span>
+                    </div>
+                  </div>
+                )}
 
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setParsedResult(null)}
-                  className="flex-1 py-2 rounded-xl border border-[#CADBCE] text-xs font-medium text-[#78716C]"
-                >
-                  Discard
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmIntent}
-                  id="confirm-voice-intent-btn"
-                  className="flex-1 py-2 rounded-xl bg-[#2C523B] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Confirm & Save</span>
-                </button>
+                {parsedResult.intent === 'move_funds' && (
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-white/60 dark:bg-black/20 p-2.5 rounded-lg">
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Amount:</span>
+                      <strong className="font-amount font-semibold text-sm text-[#486B88]">
+                        {formatPaise(parsedResult.amountInPaise)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Action:</span>
+                      <strong className="font-medium truncate block text-[#486B88]">
+                        Move Envelope Funds
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">From Envelope:</span>
+                      <strong className="truncate block">{parsedResult.fromCategoryName || 'Source'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">To Envelope:</span>
+                      <strong className="truncate block">{parsedResult.toCategoryName || 'Destination'}</strong>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-[#2C523B] dark:text-[#A8D1B7]">
+                  Requires confirmation before writing to ledger.
+                </p>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setParsedResult(null)}
+                    className="flex-1 py-2 rounded-xl border border-[#CADBCE] text-xs font-medium text-[#78716C]"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmIntent}
+                    id="confirm-voice-intent-btn"
+                    className="flex-1 py-2 rounded-xl bg-[#2C523B] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Confirm & Save</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>

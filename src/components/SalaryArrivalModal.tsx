@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useBudget } from '../context/BudgetContext';
-import { formatPaise, rupeesToPaise, paiseToRupees } from '../utils/currency';
+import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
-import { ArrowLeft, X, Check, ArrowRight, UserCheck, Plus, Minus, Landmark } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Minus, Landmark, Save, Percent, Scale, RefreshCw } from 'lucide-react';
 
 interface SalaryArrivalModalProps {
   isOpen?: boolean;
@@ -32,68 +32,170 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
 
   // Step 2: Earner selection (defaults to active user)
   const [selectedEarnerId, setSelectedEarnerId] = useState<string>(activeMember.user_id);
-  const [salaryAmountRupees, setSalaryAmountRupees] = useState<string>('');
+  const [salaryAmountRupees, setSalaryAmountRupees] = useState<string>('150000');
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
-  // Category allocations map: categoryId -> rupees string
+  // Mode: show percentage weight controls
+  const [showPercentages, setShowPercentages] = useState<boolean>(true);
+
+  // Envelope percentage weights map: categoryId -> percentage number (0-100)
+  const [percentages, setPercentages] = useState<Record<string, number>>({});
+
+  // Category allocations map: categoryId -> rupees number
   const [allocationsDraft, setAllocationsDraft] = useState<Record<string, number>>({});
 
-  // Prefill when earner changes (§4.1: prefilled with that earner's last SalaryEvent)
+  // Non-unallocated categories (real spend envelopes)
+  const nonUnallocatedCategories = useMemo(() => {
+    return activeCategories.filter(c => !c.is_unallocated);
+  }, [activeCategories]);
+
+  // Compute equal percentage distribution across envelopes
+  const getEqualPercentages = useCallback((cats: typeof nonUnallocatedCategories) => {
+    if (cats.length === 0) return {};
+    const count = cats.length;
+    const basePct = Math.floor((100 / count) * 10) / 10;
+    const pcts: Record<string, number> = {};
+    let sum = 0;
+    cats.forEach((cat, index) => {
+      if (index === count - 1) {
+        // Last category gets remaining to sum exactly to 100
+        pcts[cat.id] = Math.max(0, Number((100 - sum).toFixed(1)));
+      } else {
+        pcts[cat.id] = basePct;
+        sum += basePct;
+      }
+    });
+    return pcts;
+  }, []);
+
+  // Divide total salary amount into draft allocations based on percentages
+  const divideAmountByPercentages = useCallback(
+    (totalRupees: number, pcts: Record<string, number>, cats: typeof nonUnallocatedCategories) => {
+      const draft: Record<string, number> = {};
+      if (totalRupees <= 0 || cats.length === 0) {
+        cats.forEach(c => {
+          draft[c.id] = 0;
+        });
+        return draft;
+      }
+
+      cats.forEach(cat => {
+        const pct = pcts[cat.id] ?? (100 / cats.length);
+        draft[cat.id] = Math.round(totalRupees * (pct / 100));
+      });
+      return draft;
+    },
+    []
+  );
+
+  // Initialize and auto-divide on mount or when categories change
   useEffect(() => {
     if (!isOpen) return;
 
     setSelectedEarnerId(activeMember.user_id);
     setDate(new Date().toISOString().split('T')[0]);
 
-    // Find last salary event for earner
-    const lastEvent = salaryEvents.find(s => s.earner_user_id === activeMember.user_id);
-    if (lastEvent) {
-      setSalaryAmountRupees((lastEvent.amount / 100).toString());
+    // Check for saved percentage preferences in localStorage
+    let savedPcts: Record<string, number> | null = null;
+    try {
+      const stored = localStorage.getItem('env_budget_salary_percentages');
+      if (stored) savedPcts = JSON.parse(stored);
+    } catch {}
 
-      // Find allocations for that salary event
-      const eventAllocations = allocations.filter(a => a.salary_event_id === lastEvent.id && !a.deleted_at);
-      const draft: Record<string, number> = {};
-      eventAllocations.forEach(a => {
-        // Exclude unallocated from explicit draft inputs; it's computed as residual
-        draft[a.category_id] = a.planned_amount / 100;
-      });
-      setAllocationsDraft(draft);
-    } else {
-      setSalaryAmountRupees('150000');
-      // Set reasonable defaults based on category targets
-      const draft: Record<string, number> = {};
-      activeCategories.forEach(cat => {
-        if (!cat.is_unallocated) {
-          draft[cat.id] = cat.target_amount ? cat.target_amount / 100 : 10000;
-        }
-      });
-      setAllocationsDraft(draft);
+    // Check if all non-unallocated categories are present in saved percentages
+    const hasAllCats = savedPcts && nonUnallocatedCategories.every(c => typeof savedPcts![c.id] === 'number');
+    const activePcts = hasAllCats ? savedPcts! : getEqualPercentages(nonUnallocatedCategories);
+    setPercentages(activePcts);
+
+    // Initial salary amount (defaults to last salary event or ₹1,50,000)
+    const lastEvent = salaryEvents.find(s => s.earner_user_id === activeMember.user_id);
+    const initialRupees = lastEvent ? lastEvent.amount / 100 : 150000;
+    setSalaryAmountRupees(initialRupees.toString());
+
+    // Auto-divide money into equal parts (or saved percentages)
+    const initialDraft = divideAmountByPercentages(initialRupees, activePcts, nonUnallocatedCategories);
+    setAllocationsDraft(initialDraft);
+  }, [
+    isOpen,
+    activeMember.user_id,
+    salaryEvents,
+    nonUnallocatedCategories,
+    getEqualPercentages,
+    divideAmountByPercentages,
+  ]);
+
+  // When total salary amount changes: auto-divide immediately!
+  const handleSalaryAmountChange = (newAmountStr: string) => {
+    // Prevent negative salary values
+    const cleanStr = newAmountStr.replace(/[^0-9.]/g, '');
+    setSalaryAmountRupees(cleanStr);
+    const totalRupees = parseFloat(cleanStr) || 0;
+    const nextDraft = divideAmountByPercentages(totalRupees, percentages, nonUnallocatedCategories);
+    setAllocationsDraft(nextDraft);
+  };
+
+  // Reset to equal percentage parts across all envelopes
+  const handleEqualizePercentages = () => {
+    const equalPcts = getEqualPercentages(nonUnallocatedCategories);
+    setPercentages(equalPcts);
+    const totalRupees = parseFloat(salaryAmountRupees) || 0;
+    const nextDraft = divideAmountByPercentages(totalRupees, equalPcts, nonUnallocatedCategories);
+    setAllocationsDraft(nextDraft);
+  };
+
+  // User edits an envelope percentage directly
+  const handlePercentageChange = (catId: string, newPctVal: number) => {
+    const safePct = Math.max(0, Math.min(100, Math.round(newPctVal * 10) / 10));
+    const nextPcts = { ...percentages, [catId]: safePct };
+    setPercentages(nextPcts);
+
+    const totalRupees = parseFloat(salaryAmountRupees) || 0;
+    setAllocationsDraft(prev => ({
+      ...prev,
+      [catId]: Math.round(totalRupees * (safePct / 100)),
+    }));
+  };
+
+  // User edits an envelope rupee amount directly
+  const handleUpdateCategoryAmount = (catId: string, value: number) => {
+    const safeVal = Math.max(0, value);
+    setAllocationsDraft(prev => ({
+      ...prev,
+      [catId]: safeVal,
+    }));
+
+    // Sync percentage
+    const totalRupees = parseFloat(salaryAmountRupees) || 0;
+    if (totalRupees > 0) {
+      const derivedPct = Number(((safeVal / totalRupees) * 100).toFixed(1));
+      setPercentages(prev => ({
+        ...prev,
+        [catId]: derivedPct,
+      }));
     }
-  }, [isOpen, activeMember.user_id, salaryEvents, allocations, activeCategories]);
+  };
+
+  const handleStepper = (catId: string, deltaRupees: number) => {
+    const currentVal = allocationsDraft[catId] || 0;
+    const nextVal = Math.max(0, currentVal + deltaRupees);
+    handleUpdateCategoryAmount(catId, nextVal);
+  };
 
   // Handle earner switch
   const handleEarnerChange = (earnerId: string) => {
     setSelectedEarnerId(earnerId);
     const lastEvent = salaryEvents.find(s => s.earner_user_id === earnerId);
     if (lastEvent) {
-      setSalaryAmountRupees((lastEvent.amount / 100).toString());
-      const eventAllocations = allocations.filter(a => a.salary_event_id === lastEvent.id && !a.deleted_at);
-      const draft: Record<string, number> = {};
-      eventAllocations.forEach(a => {
-        draft[a.category_id] = a.planned_amount / 100;
-      });
-      setAllocationsDraft(draft);
+      const rupees = lastEvent.amount / 100;
+      setSalaryAmountRupees(rupees.toString());
+      const nextDraft = divideAmountByPercentages(rupees, percentages, nonUnallocatedCategories);
+      setAllocationsDraft(nextDraft);
     }
   };
 
   const totalSalaryPaise = useMemo(() => {
     return rupeesToPaise(salaryAmountRupees);
   }, [salaryAmountRupees]);
-
-  // Calculate sum of category draft allocations (excluding unallocated bucket)
-  const nonUnallocatedCategories = useMemo(() => {
-    return activeCategories.filter(c => !c.is_unallocated);
-  }, [activeCategories]);
 
   const allocatedPaiseSum = useMemo(() => {
     let sum = 0;
@@ -104,29 +206,25 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
     return sum;
   }, [nonUnallocatedCategories, allocationsDraft]);
 
+  const totalPercentageSum = useMemo(() => {
+    return Number(
+      nonUnallocatedCategories
+        .reduce((sum, cat) => sum + (percentages[cat.id] || 0), 0)
+        .toFixed(1)
+    );
+  }, [nonUnallocatedCategories, percentages]);
+
   const residualUnallocatedPaise = Math.max(0, totalSalaryPaise - allocatedPaiseSum);
   const isOverAllocated = allocatedPaiseSum > totalSalaryPaise;
-
-  const handleUpdateCategoryAmount = (catId: string, value: number) => {
-    setAllocationsDraft(prev => ({
-      ...prev,
-      [catId]: Math.max(0, value),
-    }));
-  };
-
-  const handleStepper = (catId: string, deltaRupees: number) => {
-    setAllocationsDraft(prev => {
-      const current = prev[catId] || 0;
-      return {
-        ...prev,
-        [catId]: Math.max(0, current + deltaRupees),
-      };
-    });
-  };
 
   const handleConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     if (totalSalaryPaise <= 0 || isOverAllocated) return;
+
+    // Persist customized percentage weights to localStorage
+    try {
+      localStorage.setItem('env_budget_salary_percentages', JSON.stringify(percentages));
+    } catch {}
 
     const allocList = nonUnallocatedCategories.map(cat => ({
       categoryId: cat.id,
@@ -218,9 +316,10 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
                   id="salary-amount-input"
                   type="number"
                   step="any"
+                  min="0"
                   placeholder="150000"
                   value={salaryAmountRupees}
-                  onChange={e => setSalaryAmountRupees(e.target.value)}
+                  onChange={e => handleSalaryAmountChange(e.target.value)}
                   required
                   className="w-full pl-8 pr-3 py-2 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-lg font-amount font-semibold text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-2 focus:ring-[#1F1B16]"
                 />
@@ -264,22 +363,53 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
             </div>
           </div>
 
-          {/* Category Allocation Steppers */}
+          {/* Category Allocation Steppers & Percentages */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-[#78716C] dark:text-[#A8A29E]">
-                3. Allocate to Spend Account Envelopes
-              </label>
-              <span className="text-[11px] text-[#78716C]">Adjust with steppers or type</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-2.5">
+              <div>
+                <label className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] block">
+                  3. Allocate to Spend Account Envelopes
+                </label>
+                <span className="text-[11px] text-[#78716C] dark:text-[#A8A29E]">
+                  Auto-divided by envelope weights. Adjust % or ₹ directly.
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleEqualizePercentages}
+                  id="equalize-percentages-btn"
+                  title="Divide equally across all envelopes"
+                  className="px-2.5 py-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[11px] font-semibold text-[#486B88] flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Scale className="w-3 h-3" />
+                  <span>Equalize All (Equal %)</span>
+                </button>
+
+                <span
+                  className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
+                    totalPercentageSum === 100
+                      ? 'bg-[#4E785E]/10 border-[#4E785E]/30 text-[#4E785E]'
+                      : totalPercentageSum > 100
+                      ? 'bg-[#B85D43]/10 border-[#B85D43]/30 text-[#B85D43]'
+                      : 'bg-[#AF7832]/10 border-[#AF7832]/30 text-[#AF7832]'
+                  }`}
+                  title="Total percentage allocated"
+                >
+                  {totalPercentageSum}% Total
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col gap-2">
               {nonUnallocatedCategories.map(cat => {
                 const currentVal = allocationsDraft[cat.id] || 0;
+                const currentPct = percentages[cat.id] ?? 0;
                 return (
                   <div
                     key={cat.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 sm:p-3 rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30 gap-2"
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <div
@@ -300,35 +430,54 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => handleStepper(cat.id, -500)}
-                        className="p-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#FAF7F2] text-[#78716C] dark:hover:bg-[#1A1714]"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-
-                      <div className="relative w-24">
-                        <span className="absolute left-2 top-1.5 text-xs text-[#78716C]">₹</span>
+                    <div className="flex items-center justify-end gap-2.5 shrink-0">
+                      {/* Weight / Percentage Input */}
+                      <div className="flex items-center gap-1 bg-[#FAF7F2] dark:bg-[#1A1714] px-2 py-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F]">
                         <input
                           type="number"
-                          step="100"
+                          step="0.5"
                           min="0"
-                          value={currentVal || ''}
-                          onChange={e => handleUpdateCategoryAmount(cat.id, parseFloat(e.target.value) || 0)}
-                          id={`alloc-input-${cat.id}`}
-                          className="w-full pl-5 pr-1.5 py-1 text-xs font-amount font-semibold bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-right text-[#1F1B16] dark:text-[#EDE8E1]"
+                          max="100"
+                          value={currentPct || ''}
+                          onChange={e => handlePercentageChange(cat.id, parseFloat(e.target.value) || 0)}
+                          id={`alloc-pct-${cat.id}`}
+                          aria-label={`${cat.name} percentage`}
+                          className="w-11 text-xs font-mono font-semibold text-right bg-transparent text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none"
                         />
+                        <span className="text-[10px] font-bold text-[#78716C]">%</span>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleStepper(cat.id, 500)}
-                        className="p-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#FAF7F2] text-[#78716C] dark:hover:bg-[#1A1714]"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
+                      {/* Rupee Steppers & Input */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleStepper(cat.id, -500)}
+                          className="p-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#FAF7F2] text-[#78716C] dark:hover:bg-[#1A1714] cursor-pointer"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+
+                        <div className="relative w-24">
+                          <span className="absolute left-2 top-1.5 text-xs text-[#78716C]">₹</span>
+                          <input
+                            type="number"
+                            step="100"
+                            min="0"
+                            value={currentVal || ''}
+                            onChange={e => handleUpdateCategoryAmount(cat.id, parseFloat(e.target.value) || 0)}
+                            id={`alloc-input-${cat.id}`}
+                            className="w-full pl-5 pr-1.5 py-1 text-xs font-amount font-semibold bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-right text-[#1F1B16] dark:text-[#EDE8E1]"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleStepper(cat.id, 500)}
+                          className="p-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#FAF7F2] text-[#78716C] dark:hover:bg-[#1A1714] cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -336,7 +485,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
             </div>
           </div>
 
-          {/* Confirm & Generate Transfer Checklist Button */}
+          {/* Confirm & Save Button */}
           <div className="pt-2">
             <button
               type="submit"
@@ -344,11 +493,11 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
               id="confirm-salary-allocation-btn"
               className="w-full py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-sm flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-40 transition-all cursor-pointer shadow-xs"
             >
-              <Check className="w-4 h-4" />
-              <span>Confirm & Generate Transfer Checklist</span>
+              <Save className="w-4 h-4" />
+              <span>Save & Confirm Salary Allocation</span>
             </button>
             <p className="text-[11px] text-center text-[#78716C] dark:text-[#A8A29E] mt-1.5">
-              Creates bank transfer tasks for Spend account envelopes (§4.1)
+              Saves percentage weights and generates bank transfer tasks for Spend envelopes (§4.1)
             </p>
           </div>
         </form>

@@ -30,8 +30,56 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
   const [reminderTime, setReminderTime] = useState<string>(pushSettings.reminder_time);
   const [enabled, setEnabled] = useState<boolean>(pushSettings.enabled);
   const [simulatedNotification, setSimulatedNotification] = useState<string | null>(null);
+  const [browserPermission, setBrowserPermission] = useState<string>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'unsupported';
+  });
+
+  const [permissionBannerMsg, setPermissionBannerMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  // Request browser notification permission explicitly
+  const handleRequestPermission = async () => {
+    setPermissionBannerMsg(null);
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setBrowserPermission(perm);
+        if (perm === 'granted') {
+          setEnabled(true);
+          setPermissionBannerMsg('Notification permission granted!');
+        } else if (perm === 'denied') {
+          setPermissionBannerMsg('Notification permission was blocked in browser settings.');
+        }
+      } catch (err) {
+        console.error('Error requesting notification permission:', err);
+      }
+    }
+  };
+
+  const handleToggleEnable = async (newVal: boolean) => {
+    setPermissionBannerMsg(null);
+    if (newVal && typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        const perm = await Notification.requestPermission();
+        setBrowserPermission(perm);
+        if (perm !== 'granted') {
+          setEnabled(false);
+          setPermissionBannerMsg('Permission not granted. Please allow notifications to enable daily reminders.');
+          return;
+        }
+      } else if (Notification.permission === 'denied') {
+        setBrowserPermission('denied');
+        setPermissionBannerMsg('Notifications are blocked in your browser site settings. Please allow notifications for this site to receive daily reminders.');
+        setEnabled(false);
+        return;
+      }
+    }
+    setEnabled(newVal);
+  };
 
   // Compute live preview of notification text (§4.5: "₹2,400 across Food, Travel still owed to the Salary a/c")
   const pendingDebts = activeCategories.map(cat => {
@@ -55,10 +103,23 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
   };
 
   const handleTestNotification = () => {
+    // Show on-screen toast
     setSimulatedNotification(liveNotificationText);
     setTimeout(() => {
       setSimulatedNotification(null);
     }, 4500);
+
+    // If native Notification permission is granted, dispatch a real browser notification!
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('Envelope Budgeting — Daily Reminder', {
+          body: liveNotificationText,
+          icon: '/assets/icon-192.png',
+        });
+      } catch (err) {
+        console.warn('Native notification notice:', err);
+      }
+    }
   };
 
   return (
@@ -93,24 +154,62 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
         </div>
 
         <form onSubmit={handleSave} className="p-5 sm:p-7 flex flex-col gap-4">
+          {permissionBannerMsg && (
+            <div className={`p-3 rounded-xl text-xs flex items-center justify-between border ${
+              browserPermission === 'granted'
+                ? 'bg-[#4E785E]/10 border-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7]'
+                : 'bg-[#B85D43]/10 border-[#B85D43]/20 text-[#87341D] dark:text-[#F3B3A2]'
+            }`}>
+              <span>{permissionBannerMsg}</span>
+              <button
+                type="button"
+                onClick={() => setPermissionBannerMsg(null)}
+                className="p-1 hover:opacity-75"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Toggle */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F]">
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F]">
             <div>
               <span className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] block">
                 Enable Daily Web Push
               </span>
-              <span className="text-[10px] text-[#78716C]">
-                Chrome / Android supported (VAPID)
-              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[10px] text-[#78716C]">
+                  Browser Permission:
+                </span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                  browserPermission === 'granted'
+                    ? 'bg-[#4E785E]/15 text-[#4E785E]'
+                    : browserPermission === 'denied'
+                    ? 'bg-[#B85D43]/15 text-[#B85D43]'
+                    : 'bg-[#AF7832]/15 text-[#AF7832]'
+                }`}>
+                  {browserPermission === 'granted' ? 'Allowed' : browserPermission === 'denied' ? 'Blocked' : 'Not Requested'}
+                </span>
+              </div>
             </div>
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={e => setEnabled(e.target.checked)}
-              id="reminder-enabled-toggle"
-              className="w-5 h-5 accent-[#1F1B16] cursor-pointer"
-            />
+            <div className="flex items-center gap-2">
+              {browserPermission !== 'granted' && (
+                <button
+                  type="button"
+                  onClick={handleRequestPermission}
+                  className="px-2.5 py-1 text-[11px] font-semibold bg-[#486B88] text-white rounded-lg hover:bg-[#3B5B75] transition-colors cursor-pointer"
+                >
+                  Allow Notifications
+                </button>
+              )}
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={e => handleToggleEnable(e.target.checked)}
+                id="reminder-enabled-toggle"
+                className="w-5 h-5 accent-[#1F1B16] cursor-pointer"
+              />
+            </div>
           </div>
 
           {/* Time & Timezone */}
