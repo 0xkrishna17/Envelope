@@ -16,68 +16,6 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Server-side first-time intro completion tracker
-  const completedIntroHouseholds = new Set<string>();
-
-  app.get('/api/household/:householdId/intro-status', (req, res) => {
-    const { householdId } = req.params;
-    const isCompleted = completedIntroHouseholds.has(householdId);
-    res.json({ householdId, isCompleted });
-  });
-
-  app.post('/api/household/:householdId/complete-intro', (req, res) => {
-    const { householdId } = req.params;
-    completedIntroHouseholds.add(householdId);
-    res.json({ success: true, householdId, isCompleted: true, timestamp: new Date().toISOString() });
-  });
-
-  // Server-side email invite tracking registry
-  interface SentInviteRecord {
-    householdId: string;
-    recipientEmail: string;
-    senderName: string;
-    inviteCode: string;
-    sentAt: string;
-    status: 'sent' | 'accepted';
-  }
-  const sentInvitesRegistry = new Map<string, SentInviteRecord>();
-
-  app.post('/api/household/:householdId/invite-email', (req, res) => {
-    const { householdId } = req.params;
-    const { recipientEmail, senderName, householdName, inviteUrl, inviteCode, note } = req.body;
-
-    if (!recipientEmail || typeof recipientEmail !== 'string' || !recipientEmail.includes('@')) {
-      return res.status(400).json({ error: 'A valid recipient email address is required.' });
-    }
-
-    const cleanEmail = recipientEmail.trim().toLowerCase();
-    const sentAt = new Date().toISOString();
-
-    sentInvitesRegistry.set(`${householdId}_${cleanEmail}`, {
-      householdId,
-      recipientEmail: cleanEmail,
-      senderName: senderName || 'Your partner',
-      inviteCode: inviteCode || '',
-      sentAt,
-      status: 'sent',
-    });
-
-    console.log(`[Invite Email] Invitation registered for ${cleanEmail} (Household: ${householdId}, Sender: ${senderName})`);
-
-    res.json({
-      success: true,
-      recipientEmail: cleanEmail,
-      sentAt,
-      message: `Invitation email dispatched to ${cleanEmail}`,
-    });
-  });
-
-  app.get('/api/household/:householdId/invite-status/:email', (req, res) => {
-    const { householdId, email } = req.params;
-    const record = sentInvitesRegistry.get(`${householdId}_${email.trim().toLowerCase()}`);
-    res.json({ found: Boolean(record), record });
-  });
-
   // Simple in-memory rate limiting map for intent parser (max 30 requests / min per IP)
   const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
