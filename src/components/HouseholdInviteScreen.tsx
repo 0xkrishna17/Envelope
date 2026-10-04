@@ -30,14 +30,14 @@ export const HouseholdInviteScreen: React.FC<HouseholdInviteScreenProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-5 max-w-4xl mx-auto w-full pb-20 animate-in fade-in">
-      <div className="flex items-center justify-between pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+    <div className="flex flex-col gap-5 max-w-4xl mx-auto w-full pb-28 sm:pb-20 animate-in fade-in">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
         <div className="flex items-center gap-3">
           {onBack && (
             <button
               onClick={onBack}
               id="members-back-btn"
-              className="p-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium"
+              className="min-h-11 px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center justify-center gap-1.5 text-sm sm:text-xs font-medium"
               title="Return to Envelopes"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -62,7 +62,7 @@ export const HouseholdInviteScreen: React.FC<HouseholdInviteScreenProps> = ({
         {onNavigateToSync && (
           <button
             onClick={onNavigateToSync}
-            className="text-xs text-[#486B88] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+            className="min-h-10 px-3 py-2 text-sm sm:text-xs text-[#486B88] font-semibold hover:underline inline-flex items-center justify-center gap-1 cursor-pointer self-start sm:self-auto"
           >
             <span>Cloud & Sync Screen →</span>
           </button>
@@ -83,18 +83,18 @@ export const HouseholdInviteScreen: React.FC<HouseholdInviteScreenProps> = ({
                 <div className="font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">{invitation.household_name}</div>
                 <div className="text-[#78716C] dark:text-[#A8A29E]">Invited by {invitation.inviter_email}</div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setInvitationIdToAccept(invitation.id)}
-                  className="px-3 py-1.5 rounded-lg bg-[#4E785E] text-white text-xs font-semibold cursor-pointer"
+                  className="min-h-10 px-3 py-2 rounded-lg bg-[#4E785E] text-white text-sm sm:text-xs font-semibold cursor-pointer"
                 >
                   Accept
                 </button>
                 <button
                   type="button"
                   onClick={() => runAction(() => declineInvitation(invitation.id))}
-                  className="px-3 py-1.5 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-semibold cursor-pointer"
+                  className="min-h-10 px-3 py-2 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-sm sm:text-xs font-semibold cursor-pointer"
                 >
                   Decline
                 </button>

@@ -57,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
     lastCloudSync,
   } = useBudget();
   const cloudSyncBadgeStatus = getCloudSyncBadgeStatus(cloudSyncStatus, lastCloudSync, cloudSetupStatus);
+  const shouldShowNotificationSettings = false;
 
   const rawHouseholdName = (household?.name || '').trim();
   const cleanHouseholdName =
@@ -101,29 +102,29 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Right Utilities: Cloud Sync Screen Button, Profile & Notification */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Cloud Sync Screen Trigger */}
             <button
               onClick={handleOpenSync}
               id="cloud-sync-status-btn"
               title={user ? `Signed in as ${user.displayName || user.email} — open cloud sync` : 'Connect Cloud & Google Sign-In'}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs transition-colors cursor-pointer ${
+              className={`min-h-9 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition-colors cursor-pointer ${
                 activeTab === 'sync'
                   ? 'border-[#486B88] bg-[#486B88] text-white font-semibold shadow-xs'
                   : 'border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
               }`}
             >
               {cloudSyncBadgeStatus === 'syncing' ? (
-                <RefreshCw className="w-3.5 h-3.5 text-[#486B88] animate-spin" />
+                <RefreshCw className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#486B88] animate-spin" />
               ) : user?.photoURL ? (
                 <img
                   src={user.photoURL}
                   alt={user.displayName || 'Google Account'}
                   referrerPolicy="no-referrer"
-                  className="w-4 h-4 rounded-full"
+                  className="w-5 h-5 sm:w-4 sm:h-4 rounded-full"
                 />
               ) : (
-                <Cloud className={`w-3.5 h-3.5 ${cloudSyncBadgeStatus === 'synced' ? 'text-[#4E785E]' : 'text-[#486B88]'}`} />
+                <Cloud className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${cloudSyncBadgeStatus === 'synced' ? 'text-[#4E785E]' : 'text-[#486B88]'}`} />
               )}
               <span className="hidden sm:inline font-medium text-[11px]">
                 {cloudSyncBadgeStatus === 'syncing'
@@ -133,7 +134,7 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'Cloud'}
               </span>
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
+                className={`w-2 h-2 sm:w-1.5 sm:h-1.5 rounded-full ${
                   cloudSyncBadgeStatus === 'synced'
                     ? 'bg-[#4E785E]'
                     : cloudSyncBadgeStatus === 'syncing'
@@ -146,17 +147,19 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* Daily Reminder Settings (§4.5) */}
-            <button
-              onClick={onOpenNotificationModal}
-              id="reminder-settings-btn"
-              title="Daily Payback Reminder"
-              className="p-1.5 rounded-full border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors relative cursor-pointer"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              {totalPendingPaybackPaise > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#B85D43] ring-2 ring-[#FAF7F2] dark:ring-[#1A1714]" />
-              )}
-            </button>
+            {shouldShowNotificationSettings && (
+              <button
+                onClick={onOpenNotificationModal}
+                id="reminder-settings-btn"
+                title="Daily Payback Reminder"
+                className="h-9 w-9 rounded-full border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors relative cursor-pointer flex items-center justify-center"
+              >
+                <Bell className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                {totalPendingPaybackPaise > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#B85D43] ring-2 ring-[#FAF7F2] dark:ring-[#1A1714]" />
+                )}
+              </button>
+            )}
           </div>
         </div>
 

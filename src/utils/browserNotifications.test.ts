@@ -95,7 +95,7 @@ describe('browser notification helpers', () => {
     setWindowNotification(WindowNotification);
     setNavigatorServiceWorker({
       getRegistration: vi.fn().mockRejectedValue(new Error('service worker unavailable')),
-      ready: Promise.reject(new Error('service worker unavailable')),
+      ready: Promise.resolve(undefined),
     });
 
     await expect(showReminderNotification('Payback reminder')).resolves.toEqual({

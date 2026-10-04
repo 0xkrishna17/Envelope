@@ -41,9 +41,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     lastCloudSync,
   } = useBudget();
   const cloudSyncBadgeStatus = getCloudSyncBadgeStatus(cloudSyncStatus, lastCloudSync, cloudSetupStatus);
+  const shouldShowNotificationSettings = false;
 
   return (
-    <div className="flex flex-col gap-4 animate-in fade-in pb-16">
+    <div className="flex flex-col gap-4 animate-in fade-in pb-28 sm:pb-20">
       {/* Household & User Profile Card */}
       <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 sm:p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3.5">
@@ -76,11 +77,11 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-wrap w-full sm:w-auto">
             <button
               onClick={onOpenProfileModal}
               id="settings-edit-profile-btn"
-              className="px-3 py-1.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-sm sm:text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
             >
               <Camera className="w-3.5 h-3.5 text-[#4E785E]" />
               <span>Edit Profile & Photo</span>
@@ -88,7 +89,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             <button
               onClick={onOpenInviteModal}
               id="settings-invite-partner-btn"
-              className="px-3 py-1.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 transition-opacity cursor-pointer"
+              className="min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-sm sm:text-xs font-semibold shadow-xs hover:opacity-90 transition-opacity cursor-pointer"
             >
               Members
             </button>
@@ -126,7 +127,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             type="button"
             onClick={onOpenInviteModal}
             id="settings-manage-members-btn"
-            className="text-[11px] font-semibold text-[#4E785E] hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
+            className="min-h-10 px-2 -mx-2 text-sm sm:text-[11px] font-semibold text-[#4E785E] hover:underline inline-flex items-center gap-1 cursor-pointer self-start sm:self-auto"
           >
             <span>Manage & Delete Members</span>
             <span>→</span>
@@ -145,33 +146,36 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           id="card-cloud-sync-setting"
           className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 cursor-pointer hover:border-[#D0C7B9] transition-all shadow-xs col-span-1 sm:col-span-2"
         >
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <div className="w-6 h-6 rounded-lg bg-[#486B88]/20 text-[#486B88] dark:text-[#A8C4DE] flex items-center justify-center shrink-0">
                 <Cloud className="w-3.5 h-3.5" />
               </div>
-              <span>Cloud & Cross-Device Sync (Firebase Firestore)</span>
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  cloudSyncBadgeStatus === 'synced'
-                    ? 'bg-[#4E785E]'
-                    : cloudSyncBadgeStatus === 'syncing'
-                    ? 'bg-[#486B88] animate-ping'
-                    : cloudSyncBadgeStatus === 'not_synced'
-                    ? 'bg-[#486B88]'
-                    : 'bg-[#AF7832]'
-                }`}
-              />
-            </h3>
-            <span className="text-[11px] font-semibold text-[#486B88] hover:underline shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-2">
+                  <span className="truncate">Cloud & Cross-Device Sync</span>
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      cloudSyncBadgeStatus === 'synced'
+                        ? 'bg-[#4E785E]'
+                        : cloudSyncBadgeStatus === 'syncing'
+                        ? 'bg-[#486B88] animate-ping'
+                        : cloudSyncBadgeStatus === 'not_synced'
+                        ? 'bg-[#486B88]'
+                        : 'bg-[#AF7832]'
+                    }`}
+                  />
+                </h3>
+                <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5 leading-relaxed">
+                  Real-time multi-device ledger mirroring powered by Google Firebase Firestore
+                </p>
+              </div>
+            </div>
+
+            <span className="text-[11px] font-semibold text-[#486B88] hover:underline shrink-0 self-start sm:self-auto pl-8 sm:pl-0">
               {user ? 'Manage Sync →' : 'Connect Account →'}
             </span>
           </div>
-          <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1.5 pl-8">
-            {user
-              ? `Signed in as ${user.displayName || user.email}. Your authorized devices stay updated in real time.`
-              : 'Sign in with Google to sync envelope balances across all phones and laptops.'}
-          </p>
         </div>
 
         {/* Profile & Photo Settings */}
@@ -194,23 +198,25 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
 
         {/* Daily Reminder */}
-        <div
-          onClick={onOpenNotificationModal}
-          id="card-reminder-setting"
-          className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 cursor-pointer hover:border-[#D0C7B9] transition-all shadow-xs flex items-start gap-3"
-        >
-          <div className="w-8 h-8 rounded-xl bg-[#AF7832]/20 text-[#AF7832] flex items-center justify-center shrink-0">
-            <Bell className="w-4 h-4" />
+        {shouldShowNotificationSettings && (
+          <div
+            onClick={onOpenNotificationModal}
+            id="card-reminder-setting"
+            className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 cursor-pointer hover:border-[#D0C7B9] transition-all shadow-xs flex items-start gap-3"
+          >
+            <div className="w-8 h-8 rounded-xl bg-[#AF7832]/20 text-[#AF7832] flex items-center justify-center shrink-0">
+              <Bell className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+                Daily Payback Reminder (§4.5)
+              </h3>
+              <p className="text-[11px] text-[#78716C] mt-0.5">
+                Scheduled at {pushSettings.reminder_time} IST. Alerts if card spend is awaiting payback.
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-              Daily Payback Reminder (§4.5)
-            </h3>
-            <p className="text-[11px] text-[#78716C] mt-0.5">
-              Scheduled at {pushSettings.reminder_time} IST. Alerts if card spend is awaiting payback.
-            </p>
-          </div>
-        </div>
+        )}
 
         {/* Voice AI */}
         <div

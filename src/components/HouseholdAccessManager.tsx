@@ -112,7 +112,7 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
             return (
               <div
                 key={email}
-                className="flex items-center justify-between p-2.5 px-3 hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714] transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 sm:p-2.5 sm:px-3 hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714] transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <Mail className="w-3.5 h-3.5 text-[#78716C] shrink-0" />
@@ -140,11 +140,11 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
                 {isOwner && !isHouseholdOwner && (
                   <div>
                     {emailToRemove === email ? (
-                      <div className="flex items-center gap-1.5 animate-in fade-in">
+                      <div className="flex items-center gap-1.5 animate-in fade-in self-end sm:self-auto">
                         <button
                           type="button"
                           onClick={() => handleRemove(email)}
-                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#DC2626] text-white hover:bg-[#B91C1C] cursor-pointer"
+                          className="min-h-10 px-3 py-1.5 rounded text-xs sm:text-[10px] font-bold bg-[#DC2626] text-white hover:bg-[#B91C1C] cursor-pointer"
                         >
                           Revoke
                         </button>
@@ -173,19 +173,19 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
           })}
 
           {/* Integrated Add Email Row inside the same unified box */}
-          <form onSubmit={handleAdd} className="p-2 sm:p-2.5 bg-[#FAF7F2]/60 dark:bg-[#1A1714]/60 flex items-center gap-2">
+          <form onSubmit={handleAdd} className="p-2 sm:p-2.5 bg-[#FAF7F2]/60 dark:bg-[#1A1714]/60 flex flex-col sm:flex-row sm:items-center gap-2">
             <input
               type="email"
               value={newEmail}
               onChange={e => setNewEmail(e.target.value)}
               placeholder={isOwner ? 'Send request to Google email (e.g. spouse@gmail.com)' : 'Only the owner can send household requests'}
               disabled={!isOwner}
-              className="flex-1 px-3 py-1.5 bg-white dark:bg-[#141210] rounded-lg text-xs text-[#1F1B16] dark:text-[#EDE8E1] border border-[#E8E3DA] dark:border-[#2D2823] outline-none placeholder-[#A8A29E] disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full sm:flex-1 min-h-11 px-3 py-2 bg-white dark:bg-[#141210] rounded-lg text-sm sm:text-xs text-[#1F1B16] dark:text-[#EDE8E1] border border-[#E8E3DA] dark:border-[#2D2823] outline-none placeholder-[#A8A29E] disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
               disabled={!isOwner || !newEmail.trim() || isSubmitting}
-              className="px-3.5 py-1.5 rounded-lg bg-[#4E785E] text-white font-medium text-xs hover:bg-[#436851] transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              className="w-full sm:w-auto min-h-11 px-3.5 py-2 rounded-lg bg-[#4E785E] text-white font-medium text-sm sm:text-xs hover:bg-[#436851] transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{isSubmitting ? 'Sending...' : 'Send Request'}</span>

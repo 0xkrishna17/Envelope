@@ -46,7 +46,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] rounded-full transition-colors cursor-pointer"
+          className="absolute top-4 right-4 h-10 w-10 flex items-center justify-center text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] rounded-full transition-colors cursor-pointer"
           title="Close"
         >
           <X className="w-5 h-5" />

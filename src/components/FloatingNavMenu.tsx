@@ -80,7 +80,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
       {isOpen && (
         <div
           id="floating-nav-panel"
-          className="mb-3 w-[290px] sm:w-[320px] max-w-[calc(100vw-2.5rem)] bg-[#FAF7F2] dark:bg-[#1F1B16] border border-[#DCD5C9] dark:border-[#3D362F] rounded-2xl shadow-2xl p-3 animate-in fade-in slide-in-from-bottom-5 duration-150 backdrop-blur-md"
+          className="mb-3 w-[calc(100vw-2rem)] sm:w-[320px] max-w-[calc(100vw-2rem)] bg-[#FAF7F2] dark:bg-[#1F1B16] border border-[#DCD5C9] dark:border-[#3D362F] rounded-2xl shadow-2xl p-3 animate-in fade-in slide-in-from-bottom-5 duration-150 backdrop-blur-md"
         >
           {/* Header of floating menu */}
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#E8E3DA] dark:border-[#2D2823] px-1">
@@ -94,7 +94,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
             <button
               onClick={() => handleAction(onOpenLogSpend)}
               id="floating-action-log-spend"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold hover:opacity-90 active:scale-[0.98] transition-all shadow-xs cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-sm sm:text-xs font-semibold hover:opacity-90 active:scale-[0.98] transition-all shadow-xs cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <Plus className="w-4 h-4 text-[#FAF7F2] dark:text-[#1A1714]" />
@@ -106,7 +106,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
             <button
               onClick={() => handleAction(onOpenMoveFundsModal)}
               id="floating-action-move-funds"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-medium transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-sm sm:text-xs font-medium transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <ArrowLeftRight className="w-3.5 h-3.5 text-[#486B88]" />
@@ -118,7 +118,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
             <button
               onClick={() => handleAction(onOpenSalaryModal)}
               id="floating-action-salary-arrived"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-medium transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-sm sm:text-xs font-medium transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <Landmark className="w-3.5 h-3.5 text-[#4E785E]" />
@@ -130,7 +130,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
             <button
               onClick={() => handleAction(onOpenReconcileModal)}
               id="floating-action-reconcile"
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-colors cursor-pointer ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border text-sm sm:text-xs font-medium transition-colors cursor-pointer ${
                 totalPendingPaybackPaise > 0
                   ? 'bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] border-[#E8C5BC] dark:border-[#5E261B]'
                   : 'border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1]'
@@ -154,7 +154,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
             <button
               onClick={() => handleAction(onOpenAddFundsModal)}
               id="floating-action-add-funds"
-              className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-medium transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-sm sm:text-xs font-medium transition-colors cursor-pointer"
             >
               <div className="flex items-center gap-2">
                 <PlusCircle className="w-3.5 h-3.5 text-[#2C523B]" />
@@ -167,7 +167,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
               <button
                 onClick={() => handleAction(onOpenProfileModal)}
                 id="floating-action-profile"
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-medium transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-sm sm:text-xs font-medium transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   {activeMember.avatar_url ? (
@@ -195,7 +195,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
               <button
                 onClick={() => handleAction(onOpenTour)}
                 id="floating-action-guide"
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#78716C] dark:text-[#A8A29E] text-xs font-medium transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#78716C] dark:text-[#A8A29E] text-sm sm:text-xs font-medium transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <BookOpen className="w-3.5 h-3.5 text-[#B85D43]" />
@@ -209,7 +209,7 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
               <button
                 onClick={() => handleAction(onOpenInstallModal)}
                 id="floating-action-install-pwa"
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#4E785E]/30 bg-[#4E785E]/10 hover:bg-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7] text-xs font-semibold transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border border-[#4E785E]/30 bg-[#4E785E]/10 hover:bg-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7] text-sm sm:text-xs font-semibold transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <Download className="w-3.5 h-3.5 text-[#4E785E]" />

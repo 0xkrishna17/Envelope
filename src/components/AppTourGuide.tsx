@@ -280,7 +280,7 @@ export const AppTourGuide: React.FC<AppTourGuideProps> = ({
                 disabled={isResetting}
                 id="btn-close-guide"
                 aria-label="Close guide"
-                className="p-1.5 rounded-xl text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer disabled:opacity-50"
+                className="h-10 w-10 flex items-center justify-center rounded-xl text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer disabled:opacity-50"
               >
                 <X className="w-4 h-4" />
               </button>

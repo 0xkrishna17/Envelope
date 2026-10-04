@@ -131,15 +131,15 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
   const hasLastCloudSync = Boolean(lastCloudSync?.trim());
 
   return (
-    <div className="flex flex-col gap-5 max-w-4xl mx-auto w-full pb-20 animate-in fade-in">
+    <div className="flex flex-col gap-5 max-w-4xl mx-auto w-full pb-28 sm:pb-20 animate-in fade-in">
       {/* Screen Header & Navigation */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
         <div className="flex items-center gap-3">
           {onBack && (
             <button
               onClick={onBack}
               id="sync-back-btn"
-              className="p-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium"
+              className="min-h-11 px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center justify-center gap-1.5 text-sm sm:text-xs font-medium"
               title="Return to Envelopes"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -165,7 +165,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
           onClick={handleManualSync}
           disabled={!user || isSyncingManually}
           id="sync-now-top-btn"
-          className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] hover:opacity-90 flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xs"
+          className="min-h-11 px-3.5 py-2.5 sm:py-1.5 text-sm sm:text-xs font-semibold rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] hover:opacity-90 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xs"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncingManually ? 'animate-spin' : ''}`} />
           <span>Sync Now</span>
@@ -235,7 +235,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
             <button
               onClick={logout}
               id="btn-google-signout"
-              className="px-3 py-1.5 text-xs text-[#78716C] hover:text-[#B85D43] transition-colors rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#CADBCE] cursor-pointer flex items-center justify-center gap-1 self-start sm:self-auto"
+              className="min-h-10 px-3 py-2 sm:py-1.5 text-sm sm:text-xs text-[#78716C] hover:text-[#B85D43] transition-colors rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#CADBCE] cursor-pointer flex items-center justify-center gap-1 self-start sm:self-auto"
               title="Sign out of Google"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -252,7 +252,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
               onClick={handleGoogleSignIn}
               disabled={isSigningIn}
               id="google-signin-screen-btn"
-              className="w-full py-2.5 px-4 rounded-xl bg-white dark:bg-[#28221D] border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#486B88] text-xs font-semibold shadow-xs flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-75"
+              className="w-full min-h-11 py-2.5 px-4 rounded-xl bg-white dark:bg-[#28221D] border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#486B88] text-sm sm:text-xs font-semibold shadow-xs flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-75"
             >
               {isSigningIn ? (
                 <>

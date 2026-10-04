@@ -377,7 +377,7 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-voice-modal"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
           <span>Back</span>
@@ -435,7 +435,7 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
               }}
               placeholder="e.g. Spent 850 on fuel at Shell (press Enter to parse)..."
               id="voice-transcript-input"
-              className="w-full px-3 py-2.5 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-1 focus:ring-[#1F1B16]"
+              className="w-full min-h-24 sm:min-h-20 px-3 py-2.5 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-1 focus:ring-[#1F1B16]"
             />
             {transcript && !isLoading && !parsedResult && (
               <div className="flex items-center gap-2 mt-2">

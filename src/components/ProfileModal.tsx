@@ -139,7 +139,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-profile-screen-btn"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
           <span>Back</span>
@@ -167,7 +167,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
         <div className="p-5 sm:p-7">
           <form onSubmit={handleSave} className="space-y-4 text-xs">
           {/* Photo / Avatar Section */}
-          <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3 rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823]">
             <div className="relative shrink-0">
               {avatarUrl ? (
                 <img
