@@ -2,7 +2,12 @@ import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
 import { calculateCategoryPendingDebt } from '../utils/budgetLogic';
-import { ArrowLeft, Bell, Check, X, Clock, Globe, Smartphone, Send } from 'lucide-react';
+import {
+  getBrowserNotificationPermission,
+  requestBrowserNotificationPermission,
+  showReminderNotification,
+} from '../utils/browserNotifications';
+import { ArrowLeft, Bell, Check, X, Globe, Smartphone, Send } from 'lucide-react';
 
 interface NotificationSettingsModalProps {
   isOpen?: boolean;
@@ -30,13 +35,8 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
   const [reminderTime, setReminderTime] = useState<string>(pushSettings.reminder_time);
   const [enabled, setEnabled] = useState<boolean>(pushSettings.enabled);
   const [simulatedNotification, setSimulatedNotification] = useState<string | null>(null);
-  const [browserPermission, setBrowserPermission] = useState<string>(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission;
-    }
-    return 'unsupported';
-  });
-
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>(() => getBrowserNotificationPermission());
+  const [permissionBannerType, setPermissionBannerType] = useState<'success' | 'error'>('error');
   const [permissionBannerMsg, setPermissionBannerMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -44,36 +44,50 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
   // Request browser notification permission explicitly
   const handleRequestPermission = async () => {
     setPermissionBannerMsg(null);
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const perm = await Notification.requestPermission();
-        setBrowserPermission(perm);
-        if (perm === 'granted') {
-          setEnabled(true);
-          setPermissionBannerMsg('Notification permission granted!');
-        } else if (perm === 'denied') {
-          setPermissionBannerMsg('Notification permission was blocked in browser settings.');
-        }
-      } catch (err) {
-        console.error('Error requesting notification permission:', err);
+    try {
+      const perm = await requestBrowserNotificationPermission();
+      setBrowserPermission(perm);
+      if (perm === 'granted') {
+        setEnabled(true);
+        setPermissionBannerType('success');
+        setPermissionBannerMsg('Notification permission granted! Use Test Notification Popup to confirm your browser displays it.');
+      } else if (perm === 'denied') {
+        setPermissionBannerType('error');
+        setPermissionBannerMsg('Notification permission was blocked in browser settings.');
+      } else if (perm === 'unsupported') {
+        setPermissionBannerType('error');
+        setPermissionBannerMsg('This browser does not support web notifications.');
       }
+    } catch (err) {
+      console.error('Error requesting notification permission:', err);
+      setPermissionBannerType('error');
+      setPermissionBannerMsg('Could not request notification permission in this browser.');
     }
   };
 
   const handleToggleEnable = async (newVal: boolean) => {
     setPermissionBannerMsg(null);
-    if (newVal && typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        const perm = await Notification.requestPermission();
+    if (newVal) {
+      const currentPermission = getBrowserNotificationPermission();
+      setBrowserPermission(currentPermission);
+
+      if (currentPermission === 'default') {
+        const perm = await requestBrowserNotificationPermission();
         setBrowserPermission(perm);
         if (perm !== 'granted') {
           setEnabled(false);
+          setPermissionBannerType('error');
           setPermissionBannerMsg('Permission not granted. Please allow notifications to enable daily reminders.');
           return;
         }
-      } else if (Notification.permission === 'denied') {
-        setBrowserPermission('denied');
+      } else if (currentPermission === 'denied') {
+        setPermissionBannerType('error');
         setPermissionBannerMsg('Notifications are blocked in your browser site settings. Please allow notifications for this site to receive daily reminders.');
+        setEnabled(false);
+        return;
+      } else if (currentPermission === 'unsupported') {
+        setPermissionBannerType('error');
+        setPermissionBannerMsg('This browser does not support web notifications.');
         setEnabled(false);
         return;
       }
@@ -102,23 +116,39 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
     handleBack();
   };
 
-  const handleTestNotification = () => {
-    // Show on-screen toast
+  const handleTestNotification = async () => {
+    setPermissionBannerMsg(null);
+
+    // Show in-app confirmation regardless of native browser support.
     setSimulatedNotification(liveNotificationText);
     setTimeout(() => {
       setSimulatedNotification(null);
     }, 4500);
 
-    // If native Notification permission is granted, dispatch a real browser notification!
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification('Envelope Budgeting — Daily Reminder', {
-          body: liveNotificationText,
-          icon: '/assets/icon-192.png',
-        });
-      } catch (err) {
-        console.warn('Native notification notice:', err);
-      }
+    const currentPermission = getBrowserNotificationPermission();
+    setBrowserPermission(currentPermission);
+
+    if (currentPermission !== 'granted') {
+      setPermissionBannerType('error');
+      setPermissionBannerMsg(
+        currentPermission === 'unsupported'
+          ? 'This browser does not support native notification popups, so only the in-app preview was shown.'
+          : 'Browser notifications are not allowed yet. Click Allow Notifications first, then test again.'
+      );
+      return;
+    }
+
+    const result = await showReminderNotification(liveNotificationText);
+    if (result.ok) {
+      setPermissionBannerType('success');
+      setPermissionBannerMsg(
+        result.method === 'service_worker'
+          ? 'Test notification sent through the service worker.'
+          : 'Test notification sent through the browser notification API.'
+      );
+    } else {
+      setPermissionBannerType('error');
+      setPermissionBannerMsg(`${result.message} The in-app preview above still shows what the reminder will say.`);
     }
   };
 
@@ -156,7 +186,7 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
         <form onSubmit={handleSave} className="p-5 sm:p-7 flex flex-col gap-4">
           {permissionBannerMsg && (
             <div className={`p-3 rounded-xl text-xs flex items-center justify-between border ${
-              browserPermission === 'granted'
+              permissionBannerType === 'success'
                 ? 'bg-[#4E785E]/10 border-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7]'
                 : 'bg-[#B85D43]/10 border-[#B85D43]/20 text-[#87341D] dark:text-[#F3B3A2]'
             }`}>

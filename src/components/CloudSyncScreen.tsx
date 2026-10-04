@@ -4,6 +4,7 @@ import { useBudget } from '../context/BudgetContext';
 import { useApiLoading } from '../context/ApiLoadingContext';
 import {
   formatLastCloudSync,
+  getCloudSyncBadgeStatus,
   getCloudSyncDescription,
   getCloudSyncHeadline,
 } from '../utils/syncDisplay';
@@ -18,7 +19,6 @@ import {
   ShieldCheck,
   Loader2,
   ArrowLeft,
-  Database,
   Lock,
   RotateCcw,
 } from 'lucide-react';
@@ -119,6 +119,16 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
   const isCloudVerified = cloudSetupStatus === 'verified';
   const canLeaveHousehold = Boolean(user && isCloudVerified && !isOwner);
   const isIframe = window.self !== window.top;
+  const cloudSyncBadgeStatus = getCloudSyncBadgeStatus(cloudSyncStatus, lastCloudSync, cloudSetupStatus);
+  const cloudSyncBadgeLabel =
+    cloudSyncBadgeStatus === 'not_synced'
+      ? 'Ready'
+      : cloudSyncBadgeStatus === 'local_only'
+      ? 'Local only'
+      : cloudSyncBadgeStatus === 'access_denied'
+      ? 'Access denied'
+      : cloudSyncBadgeStatus;
+  const hasLastCloudSync = Boolean(lastCloudSync?.trim());
 
   return (
     <div className="flex flex-col gap-5 max-w-4xl mx-auto w-full pb-20 animate-in fade-in">
@@ -162,164 +172,159 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
         </button>
       </div>
 
-      {/* Grid: Live Connection Status + Google Authentication */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Card 1: Live Status */}
-        <div className="p-4 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1.5">
-                <Database className="w-3.5 h-3.5 text-[#486B88]" />
-                Connection Health
-              </span>
+      {/* Google Authentication + Cloud Sync Status */}
+      <div className="p-4 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1.5">
+            <Lock className="w-3.5 h-3.5 text-[#4E785E]" />
+            Google Account & Cloud Sync
+          </span>
+          {user && (
+            <span
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 self-start sm:self-auto ${
+                cloudSyncBadgeStatus === 'synced'
+                  ? 'bg-[#4E785E]/15 text-[#2C523B] dark:text-[#A1D1B1]'
+                  : cloudSyncBadgeStatus === 'syncing'
+                  ? 'bg-[#486B88]/15 text-[#486B88]'
+                  : cloudSyncBadgeStatus === 'not_synced'
+                  ? 'bg-[#486B88]/15 text-[#486B88]'
+                  : 'bg-[#AF7832]/15 text-[#AF7832]'
+              }`}
+            >
               <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                  cloudSyncStatus === 'synced'
-                    ? 'bg-[#4E785E]/15 text-[#2C523B] dark:text-[#A1D1B1]'
-                    : cloudSyncStatus === 'syncing'
-                    ? 'bg-[#486B88]/15 text-[#486B88]'
-                    : 'bg-[#AF7832]/15 text-[#AF7832]'
+                className={`w-1.5 h-1.5 rounded-full ${
+                  cloudSyncBadgeStatus === 'synced'
+                    ? 'bg-[#4E785E]'
+                    : cloudSyncBadgeStatus === 'syncing'
+                    ? 'bg-[#486B88] animate-ping'
+                    : cloudSyncBadgeStatus === 'not_synced'
+                    ? 'bg-[#486B88]'
+                    : 'bg-[#AF7832]'
                 }`}
-              >
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    cloudSyncStatus === 'synced'
-                      ? 'bg-[#4E785E]'
-                      : cloudSyncStatus === 'syncing'
-                      ? 'bg-[#486B88] animate-ping'
-                      : 'bg-[#AF7832]'
-                  }`}
+              />
+              <span className="capitalize">{cloudSyncBadgeLabel.replace('_', ' ')}</span>
+            </span>
+          )}
+        </div>
+
+        {user ? (
+          <div className="p-3 rounded-xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {user.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName || 'Google Account'}
+                  referrerPolicy="no-referrer"
+                  className="w-10 h-10 rounded-full border border-black/10 shrink-0 object-cover"
                 />
-                <span className="capitalize">{cloudSyncStatus}</span>
-              </span>
-            </div>
-
-            <div className="text-base font-bold text-[#1F1B16] dark:text-[#EDE8E1]">
-              {getCloudSyncHeadline(cloudSyncStatus)}
-            </div>
-
-            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1.5 leading-relaxed">
-              {getCloudSyncDescription(cloudSyncStatus)}
-            </p>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-[#E8E3DA] dark:border-[#2D2823] flex items-center justify-between text-xs text-[#78716C] dark:text-[#A8A29E]">
-            <span>Last synchronized:</span>
-            <span className="font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-              {formatLastCloudSync(lastCloudSync)}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 2: Google Authentication */}
-        <div className="p-4 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col justify-between">
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1.5 mb-3">
-              <Lock className="w-3.5 h-3.5 text-[#4E785E]" />
-              Google Account Identity
-            </span>
-
-            {user ? (
-              <div className="p-3 rounded-xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823] flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0">
-                  {user.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt={user.displayName || 'Google Account'}
-                      referrerPolicy="no-referrer"
-                      className="w-10 h-10 rounded-full border border-black/10 shrink-0 object-cover"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] flex items-center justify-center font-bold text-sm shrink-0">
-                      {user.displayName ? user.displayName[0] : 'U'}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1] truncate">
-                      {user.displayName || 'Google User'}
-                    </div>
-                    <div className="text-xs text-[#78716C] dark:text-[#A8A29E] truncate">
-                      {user.email}
-                    </div>
-                  </div>
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] flex items-center justify-center font-bold text-sm shrink-0">
+                  {user.displayName ? user.displayName[0] : 'U'}
                 </div>
-
-                <button
-                  onClick={logout}
-                  id="btn-google-signout"
-                  className="px-3 py-1.5 text-xs text-[#78716C] hover:text-[#B85D43] transition-colors rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#CADBCE] cursor-pointer flex items-center gap-1"
-                  title="Sign out of Google"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
-                </button>
+              )}
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1] truncate">
+                  {user.displayName || 'Google User'}
+                </div>
+                <div className="text-xs text-[#78716C] dark:text-[#A8A29E] truncate">
+                  {user.email}
+                </div>
               </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs text-[#78716C] dark:text-[#A8A29E] leading-relaxed">
-                  Sign in with your Google Account to create or open your private cloud ledger. Shared households appear only after an owner invites this email.
-                </p>
+            </div>
 
-                <button
-                  onClick={handleGoogleSignIn}
-                  disabled={isSigningIn}
-                  id="google-signin-screen-btn"
-                  className="w-full py-2.5 px-4 rounded-xl bg-white dark:bg-[#28221D] border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#486B88] text-xs font-semibold shadow-xs flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-75"
+            <button
+              onClick={logout}
+              id="btn-google-signout"
+              className="px-3 py-1.5 text-xs text-[#78716C] hover:text-[#B85D43] transition-colors rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#CADBCE] cursor-pointer flex items-center justify-center gap-1 self-start sm:self-auto"
+              title="Sign out of Google"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] leading-relaxed">
+              Sign in with your Google Account to create or open your private cloud ledger. Shared households appear only after an owner invites this email.
+            </p>
+
+            <button
+              onClick={handleGoogleSignIn}
+              disabled={isSigningIn}
+              id="google-signin-screen-btn"
+              className="w-full py-2.5 px-4 rounded-xl bg-white dark:bg-[#28221D] border border-[#DCD5C9] dark:border-[#3D362F] hover:border-[#486B88] text-xs font-semibold shadow-xs flex items-center justify-center gap-2.5 transition-all cursor-pointer disabled:opacity-75"
+            >
+              {isSigningIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-[#486B88]" />
+                  <span>Connecting Google Account...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  <span>Sign in with Google</span>
+                </>
+              )}
+            </button>
+
+            {isIframe && (
+              <div className="text-[11px] text-[#78716C] dark:text-[#A8A29E] bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 p-2 rounded-lg flex items-center justify-between border border-[#E8E3DA]">
+                <span>Viewing in AI Studio preview?</span>
+                <a
+                  href={window.location.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-[#486B88] hover:underline flex items-center gap-1"
                 >
-                  {isSigningIn ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-[#486B88]" />
-                      <span>Connecting Google Account...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                        />
-                      </svg>
-                      <span>Sign in with Google</span>
-                    </>
-                  )}
-                </button>
-
-                {isIframe && (
-                  <div className="text-[11px] text-[#78716C] dark:text-[#A8A29E] bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 p-2 rounded-lg flex items-center justify-between border border-[#E8E3DA]">
-                    <span>Viewing in AI Studio preview?</span>
-                    <a
-                      href={window.location.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold text-[#486B88] hover:underline flex items-center gap-1"
-                    >
-                      <span>Open in new tab</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                )}
+                  <span>Open in new tab</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
-            )}
-
-            {errorMessage && (
-              <p className="text-xs text-[#B85D43] mt-2 bg-[#F9ECE8] dark:bg-[#331D16] p-2.5 rounded-lg border border-[#E8C5BC] dark:border-[#5E261B]">
-                {errorMessage}
-              </p>
             )}
           </div>
-        </div>
+        )}
+
+        {user && (
+          <div className="pt-3 border-t border-[#E8E3DA] dark:border-[#2D2823]">
+            <div className="text-base font-bold text-[#1F1B16] dark:text-[#EDE8E1]">
+              {getCloudSyncHeadline(cloudSyncBadgeStatus)}
+            </div>
+            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1.5 leading-relaxed">
+              {getCloudSyncDescription(cloudSyncBadgeStatus)}
+            </p>
+            {hasLastCloudSync && (
+              <div className="mt-3 flex items-center justify-between text-xs text-[#78716C] dark:text-[#A8A29E]">
+                <span>Last synchronized:</span>
+                <span className="font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+                  {formatLastCloudSync(lastCloudSync)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {errorMessage && (
+          <p className="text-xs text-[#B85D43] bg-[#F9ECE8] dark:bg-[#331D16] p-2.5 rounded-lg border border-[#E8C5BC] dark:border-[#5E261B]">
+            {errorMessage}
+          </p>
+        )}
       </div>
 
       {cloudSetupStatus === 'access_denied' && (

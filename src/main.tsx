@@ -6,7 +6,18 @@ import './index.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err => {
+    const hadController = Boolean(navigator.serviceWorker.controller);
+
+    navigator.serviceWorker.register('/sw.js').then(registration => {
+      registration.update().catch(() => undefined);
+
+      let isRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || isRefreshing) return;
+        isRefreshing = true;
+        window.location.reload();
+      });
+    }).catch(err => {
       console.log('SW registration note:', err);
     });
   });

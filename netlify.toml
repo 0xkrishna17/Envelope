@@ -6,6 +6,21 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
 [[redirects]]
   from = "/api/parse-voice-intent"
   to = "/.netlify/functions/parse-voice-intent"
@@ -15,6 +30,11 @@
   from = "/api/health"
   to = "/.netlify/functions/health"
   status = 200
+
+[[redirects]]
+  from = "/assets/*"
+  to = "/404.html"
+  status = 404
 
 [[redirects]]
   from = "/*"

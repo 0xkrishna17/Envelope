@@ -5,6 +5,7 @@ import { APP_VERSION } from '../App';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
 import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen, Download, Smartphone } from 'lucide-react';
 import { ResetDataWarningModal } from './ResetDataWarningModal';
+import { getCloudSyncBadgeStatus } from '../utils/syncDisplay';
 
 interface SettingsTabProps {
   onOpenInviteModal: () => void;
@@ -36,8 +37,10 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
     pushSettings,
     resetLedgerToZero,
     cloudSyncStatus,
+    cloudSetupStatus,
     lastCloudSync,
   } = useBudget();
+  const cloudSyncBadgeStatus = getCloudSyncBadgeStatus(cloudSyncStatus, lastCloudSync, cloudSetupStatus);
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in pb-16">
@@ -150,10 +153,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               <span>Cloud & Cross-Device Sync (Firebase Firestore)</span>
               <span
                 className={`w-2 h-2 rounded-full ${
-                  cloudSyncStatus === 'synced'
+                  cloudSyncBadgeStatus === 'synced'
                     ? 'bg-[#4E785E]'
-                    : cloudSyncStatus === 'syncing'
+                    : cloudSyncBadgeStatus === 'syncing'
                     ? 'bg-[#486B88] animate-ping'
+                    : cloudSyncBadgeStatus === 'not_synced'
+                    ? 'bg-[#486B88]'
                     : 'bg-[#AF7832]'
                 }`}
               />

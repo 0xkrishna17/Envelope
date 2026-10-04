@@ -2,6 +2,7 @@ import React from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
 import { formatPaise } from '../utils/currency';
+import { getCloudSyncBadgeStatus } from '../utils/syncDisplay';
 import { ActiveTab } from '../types';
 import {
   User,
@@ -52,7 +53,10 @@ export const Header: React.FC<HeaderProps> = ({
     setActiveMemberId,
     totalPendingPaybackPaise,
     cloudSyncStatus,
+    cloudSetupStatus,
+    lastCloudSync,
   } = useBudget();
+  const cloudSyncBadgeStatus = getCloudSyncBadgeStatus(cloudSyncStatus, lastCloudSync, cloudSetupStatus);
 
   const rawHouseholdName = (household?.name || '').trim();
   const cleanHouseholdName =
@@ -102,14 +106,14 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={handleOpenSync}
               id="cloud-sync-status-btn"
-              title={user ? `Signed in as ${user.displayName || user.email} (Firebase Firestore Synced)` : 'Connect Cloud & Google Sign-In'}
+              title={user ? `Signed in as ${user.displayName || user.email} — open cloud sync` : 'Connect Cloud & Google Sign-In'}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs transition-colors cursor-pointer ${
                 activeTab === 'sync'
                   ? 'border-[#486B88] bg-[#486B88] text-white font-semibold shadow-xs'
                   : 'border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
               }`}
             >
-              {cloudSyncStatus === 'syncing' ? (
+              {cloudSyncBadgeStatus === 'syncing' ? (
                 <RefreshCw className="w-3.5 h-3.5 text-[#486B88] animate-spin" />
               ) : user?.photoURL ? (
                 <img
@@ -119,10 +123,10 @@ export const Header: React.FC<HeaderProps> = ({
                   className="w-4 h-4 rounded-full"
                 />
               ) : (
-                <Cloud className={`w-3.5 h-3.5 ${cloudSyncStatus === 'synced' ? 'text-[#4E785E]' : 'text-[#486B88]'}`} />
+                <Cloud className={`w-3.5 h-3.5 ${cloudSyncBadgeStatus === 'synced' ? 'text-[#4E785E]' : 'text-[#486B88]'}`} />
               )}
               <span className="hidden sm:inline font-medium text-[11px]">
-                {cloudSyncStatus === 'syncing'
+                {cloudSyncBadgeStatus === 'syncing'
                   ? 'Syncing...'
                   : user
                   ? user.displayName?.split(' ')[0] || 'Sync'
@@ -130,10 +134,12 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
-                  cloudSyncStatus === 'synced'
+                  cloudSyncBadgeStatus === 'synced'
                     ? 'bg-[#4E785E]'
-                    : cloudSyncStatus === 'syncing'
+                    : cloudSyncBadgeStatus === 'syncing'
                     ? 'bg-[#486B88] animate-ping'
+                    : cloudSyncBadgeStatus === 'not_synced'
+                    ? 'bg-[#486B88]'
                     : 'bg-[#AF7832]'
                 }`}
               />
