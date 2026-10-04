@@ -15,6 +15,7 @@ import {
 } from '../types';
 import { INITIAL_HOUSEHOLD, INITIAL_MEMBERS, INITIAL_CATEGORIES } from '../data/initialData';
 import { executeFifoReconciliation, recomputeTransactionStatuses } from '../utils/budgetLogic';
+import { clampDateInputToToday } from '../utils/dateUtils';
 import { LedgerState, SyncState } from './types';
 import { DEFAULT_HOUSEHOLD_DOC_ID, normalizeHouseholdDocId } from '../sync/householdIdentity';
 
@@ -191,6 +192,7 @@ export const ledgerSlice = createSlice({
     ) => {
       const { id, categoryId, amount, paymentMethod, note, date, loggedByUserId } = action.payload;
       const nowIso = new Date().toISOString();
+      const entryDate = clampDateInputToToday(date);
       const newTx: Transaction = {
         id: id || `tx_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         household_id: state.household.id,
@@ -198,7 +200,7 @@ export const ledgerSlice = createSlice({
         amount,
         payment_method: paymentMethod,
         note: note ? note.trim() : undefined,
-        date,
+        date: entryDate,
         logged_by_user_id: loggedByUserId || state.activeMemberId,
         reconciliation_status: paymentMethod === 'credit_card' ? 'pending' : 'n/a',
         created_at: nowIso,
@@ -223,10 +225,12 @@ export const ledgerSlice = createSlice({
       const tx = state.transactions.find(t => t.id === id);
       if (!tx) return;
 
+      const entryDate = clampDateInputToToday(date);
       const trimmedNote = note ? note.trim() : undefined;
       const isSameFinancialBucket = tx.category_id === categoryId && tx.payment_method === paymentMethod;
       const amountDelta = amount - tx.amount;
-      const metadataChanged = tx.date !== date || (tx.note || undefined) !== trimmedNote;
+      const metadataChanged = tx.date !== entryDate || (tx.note || undefined) !== trimmedNote;
+
       const financialBucketChanged = !isSameFinancialBucket;
       const generatedSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const nextStatus: ReconciliationStatus = paymentMethod === 'credit_card' ? 'pending' : 'n/a';
@@ -245,7 +249,7 @@ export const ledgerSlice = createSlice({
           amount: amountDelta,
           payment_method: paymentMethod,
           note: adjustmentNote,
-          date,
+          date: entryDate,
           logged_by_user_id: tx.logged_by_user_id,
           reconciliation_status: 'n/a',
           created_at: nowIso,
@@ -264,7 +268,7 @@ export const ledgerSlice = createSlice({
         amount: -tx.amount,
         payment_method: tx.payment_method,
         note: `Reversal for transaction ${tx.id}`,
-        date,
+        date: entryDate,
         logged_by_user_id: tx.logged_by_user_id,
         reconciliation_status: 'n/a',
         created_at: nowIso,
@@ -280,7 +284,7 @@ export const ledgerSlice = createSlice({
         amount,
         payment_method: paymentMethod,
         note: trimmedNote || `Replacement for transaction ${tx.id}`,
-        date,
+        date: entryDate,
         logged_by_user_id: tx.logged_by_user_id,
         reconciliation_status: nextStatus,
         created_at: nowIso,
@@ -331,6 +335,7 @@ export const ledgerSlice = createSlice({
     ) => {
       const { categoryId, amountPaise, note, date, loggedByUserId } = action.payload;
       const nowIso = new Date().toISOString();
+      const entryDate = clampDateInputToToday(date || nowIso.split('T')[0]);
       const newTx: Transaction = {
         id: `tx_corr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         household_id: state.household.id,
@@ -338,7 +343,7 @@ export const ledgerSlice = createSlice({
         amount: amountPaise,
         payment_method: 'secondary_account_debit',
         note: `[Correction] ${note.trim()}`,
-        date: date || nowIso.split('T')[0],
+        date: entryDate,
         logged_by_user_id: loggedByUserId || state.activeMemberId,
         reconciliation_status: 'n/a',
         created_at: nowIso,
@@ -359,6 +364,7 @@ export const ledgerSlice = createSlice({
     ) => {
       const { salaryAmountPaise, date, earnerUserId, allocations: inputAllocations } = action.payload;
       const nowIso = new Date().toISOString();
+      const entryDate = clampDateInputToToday(date);
       const salaryId = `sal_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
       const newSalaryEvent: SalaryEvent = {
@@ -366,7 +372,7 @@ export const ledgerSlice = createSlice({
         household_id: state.household.id,
         earner_user_id: earnerUserId,
         amount: salaryAmountPaise,
-        date,
+        date: entryDate,
         created_at: nowIso,
       };
 
@@ -445,6 +451,7 @@ export const ledgerSlice = createSlice({
     ) => {
       const { categoryId, amountToPayPaise, date, loggedByUserId, reconciliationId: customId } = action.payload;
       const nowIso = new Date().toISOString();
+      const entryDate = clampDateInputToToday(date);
       const recId = customId || `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       const { createdLines, transactionStatusUpdates } = executeFifoReconciliation(
@@ -460,7 +467,7 @@ export const ledgerSlice = createSlice({
         household_id: state.household.id,
         category_id: categoryId,
         total_amount: amountToPayPaise,
-        date,
+        date: entryDate,
         logged_by_user_id: loggedByUserId || state.activeMemberId,
         created_at: nowIso,
       };
@@ -529,7 +536,7 @@ export const ledgerSlice = createSlice({
     ) => {
       const { fromCategoryId, toCategoryId, amountPaise, date, note, loggedByUserId } = action.payload;
       const nowIso = new Date().toISOString();
-      const transferDate = date || nowIso.split('T')[0];
+      const transferDate = clampDateInputToToday(date || nowIso.split('T')[0]);
       const transferId = `tr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
       const newTransfer: EnvelopeTransfer = {
@@ -639,7 +646,7 @@ export const ledgerSlice = createSlice({
       } = action.payload;
 
       const nowIso = new Date().toISOString();
-      const entryDate = date || nowIso.split('T')[0];
+      const entryDate = clampDateInputToToday(date || nowIso.split('T')[0]);
       const topupId = `env_topup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const isTransferred = explicitTransferred !== undefined ? explicitTransferred : depositHolding !== 'primary_account';
 

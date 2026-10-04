@@ -4,12 +4,14 @@ import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { ArrowLeft, Check, Plus, Minus, Landmark, Save, Percent, Scale, RefreshCw } from 'lucide-react';
 import { isWholeRupeeInput, parseWholeRupeeInput } from '../utils/wholeRupeeInput';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 
 interface SalaryArrivalModalProps {
   isOpen?: boolean;
   onClose?: () => void;
   onBack?: () => void;
   onSuccessOpenChecklist?: () => void;
+  initialAmountPaise?: number;
 }
 
 export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
@@ -17,6 +19,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
   onClose,
   onBack,
   onSuccessOpenChecklist,
+  initialAmountPaise,
 }) => {
   const handleBack = () => {
     if (onBack) onBack();
@@ -34,7 +37,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
   // Step 2: Earner selection (defaults to active user)
   const [selectedEarnerId, setSelectedEarnerId] = useState<string>(activeMember.user_id);
   const [salaryAmountRupees, setSalaryAmountRupees] = useState<string>('150000');
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => getTodayDateInputValue());
 
   // Mode: show percentage weight controls
   const [showPercentages, setShowPercentages] = useState<boolean>(true);
@@ -94,7 +97,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
     if (!isOpen) return;
 
     setSelectedEarnerId(activeMember.user_id);
-    setDate(new Date().toISOString().split('T')[0]);
+    setDate(getTodayDateInputValue());
 
     // Check for saved percentage preferences in localStorage
     let savedPcts: Record<string, number> | null = null;
@@ -108,9 +111,13 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
     const activePcts = hasAllCats ? savedPcts! : getEqualPercentages(nonUnallocatedCategories);
     setPercentages(activePcts);
 
-    // Initial salary amount (defaults to last salary event or ₹1,50,000)
+    // Initial salary amount (voice intent amount, else last salary event or ₹1,50,000)
     const lastEvent = salaryEvents.find(s => s.earner_user_id === activeMember.user_id);
-    const initialRupees = lastEvent ? lastEvent.amount / 100 : 150000;
+    const initialRupees = initialAmountPaise && initialAmountPaise > 0
+      ? Math.trunc(initialAmountPaise / 100)
+      : lastEvent
+      ? lastEvent.amount / 100
+      : 150000;
     setSalaryAmountRupees(initialRupees.toString());
 
     // Auto-divide money into equal parts (or saved percentages)
@@ -119,6 +126,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
   }, [
     isOpen,
     activeMember.user_id,
+    initialAmountPaise,
     salaryEvents,
     nonUnallocatedCategories,
     getEqualPercentages,
@@ -237,7 +245,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
       amountPaise: Math.round((allocationsDraft[cat.id] || 0) * 100),
     }));
 
-    addSalaryAndAllocations(selectedEarnerId, totalSalaryPaise, date, allocList);
+    addSalaryAndAllocations(selectedEarnerId, totalSalaryPaise, clampDateInputToToday(date), allocList);
     handleBack();
     if (onSuccessOpenChecklist) {
       onSuccessOpenChecklist();
@@ -340,7 +348,8 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
                 id="salary-date-input"
                 type="date"
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                max={getTodayDateInputValue()}
+                onChange={e => setDate(clampDateInputToToday(e.target.value))}
                 required
                 className="w-full px-3 py-2 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none"
               />

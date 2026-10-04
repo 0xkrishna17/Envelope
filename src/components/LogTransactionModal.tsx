@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { PaymentMethod } from '../types';
 import { rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import {
   ArrowLeft,
   Calendar,
@@ -52,7 +53,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('other');
   const [note, setNote] = useState<string>('');
   const [showNoteField, setShowNoteField] = useState<boolean>(false);
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => getTodayDateInputValue());
   const [isRefund, setIsRefund] = useState<boolean>(false);
 
   const amountInputRef = useRef<HTMLInputElement>(null);
@@ -98,7 +99,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
         setShowNoteField(false);
         setIsRefund(false);
       }
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(getTodayDateInputValue());
 
       // Focus amount field instantly for <5 sec entry rule
       setTimeout(() => {
@@ -119,7 +120,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
     addTransaction({
       category_id: selectedCategoryId,
       amount: finalAmount,
-      date,
+      date: clampDateInputToToday(date),
       payment_method: paymentMethod,
       note: note.trim() || undefined,
     });
@@ -315,7 +316,8 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
               <input
                 type="date"
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                max={getTodayDateInputValue()}
+                onChange={e => setDate(clampDateInputToToday(e.target.value))}
                 id="tx-date-input"
                 className="bg-transparent text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1] border-b border-[#DCD5C9] dark:border-[#3D362F] pb-0.5 focus:outline-none"
               />

@@ -5,6 +5,7 @@ import { renderCategoryIcon } from '../utils/categoryTheme';
 import {
   calculateCategoryPendingDebt,
 } from '../utils/budgetLogic';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { ArrowLeft, X, Check, ArrowRight, RefreshCw, AlertCircle, History, Trash2 } from 'lucide-react';
 
 interface ReconciliationModalProps {
@@ -37,7 +38,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
   // Selected category to pay back
   const [selectedCatId, setSelectedCatId] = useState<string>(preselectedCategoryId || '');
   const [payAmountRupees, setPayAmountRupees] = useState<string>('');
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => getTodayDateInputValue());
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [justSettled, setJustSettled] = useState<boolean>(false);
 
@@ -89,7 +90,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
     // Never editable above the amount owed (§4.4)
     const cappedPaise = Math.min(amountPaise, activeDebtItem.totalPendingDebt);
 
-    reconcileCategoryCardSpend(activeDebtItem.category.id, cappedPaise, date);
+    reconcileCategoryCardSpend(activeDebtItem.category.id, cappedPaise, clampDateInputToToday(date));
 
     setJustSettled(true);
     setTimeout(() => {
@@ -316,7 +317,8 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
                     <input
                       type="date"
                       value={date}
-                      onChange={e => setDate(e.target.value)}
+                      max={getTodayDateInputValue()}
+                      onChange={e => setDate(clampDateInputToToday(e.target.value))}
                       required
                       id="payback-date-input"
                       className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1]"

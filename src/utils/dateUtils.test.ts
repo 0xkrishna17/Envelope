@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseYearMonth,
+  clampDateInputToToday,
   formatSelectedMonth,
-  isCurrentCalendarMonth,
   getSelectedMonthLabel,
+  getTodayDateInputValue,
+  isCurrentCalendarMonth,
+  isFutureDateInputValue,
+  parseYearMonth,
 } from './dateUtils';
 
 describe('Date & Month Formatting Utilities Unit Tests', () => {
@@ -45,6 +48,21 @@ describe('Date & Month Formatting Utilities Unit Tests', () => {
       const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const label = getSelectedMonthLabel(currentYM, { includeThisMonthBadge: true });
       expect(label).toContain('(This Month)');
+    });
+  });
+
+  describe('future-date guards', () => {
+    it('detects and clamps future date input values to today', () => {
+      const today = getTodayDateInputValue();
+      const future = '2999-12-31';
+
+      expect(isFutureDateInputValue(future)).toBe(true);
+      expect(clampDateInputToToday(future)).toBe(today);
+    });
+
+    it('keeps valid past dates unchanged and invalid dates as today', () => {
+      expect(clampDateInputToToday('2000-01-01')).toBe('2000-01-01');
+      expect(clampDateInputToToday('not-a-date')).toBe(getTodayDateInputValue());
     });
   });
 });

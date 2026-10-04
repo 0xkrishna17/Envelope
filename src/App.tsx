@@ -40,7 +40,6 @@ function BudgetAppContent() {
     categories,
     selectedMonth,
     setSelectedMonth,
-    resetLedgerToZero,
     isFirstTimeIntroCompleted,
     isAccessAllowed,
     cloudSetupStatus,
@@ -50,7 +49,7 @@ function BudgetAppContent() {
   const { isInstalled, showInstallGuide, triggerInstall, closeInstallGuide, hasNativePrompt } = usePwaInstall();
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, profileLoading, userProfileCompleted, userIntroCompleted, markUserIntroCompleted } = useAuth();
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('envelopes');
@@ -59,7 +58,7 @@ function BudgetAppContent() {
   type ActiveScreen =
     | { type: 'log-expense'; preselectedCatId?: string; initialValues?: any }
     | { type: 'envelope-detail'; categoryId: string }
-    | { type: 'salary-arrival' }
+    | { type: 'salary-arrival'; initialAmountPaise?: number }
     | { type: 'reconcile'; categoryId?: string }
     | { type: 'add-funds'; categoryId?: string; initialAmount?: number }
     | { type: 'move-funds'; fromCatId?: string; toCatId?: string; amountPaise?: number }
@@ -78,26 +77,39 @@ function BudgetAppContent() {
   };
 
   useEffect(() => {
-    const hasCompletedProfile = localStorage.getItem('env_budget_profile_completed');
+    if (authLoading || profileLoading) return;
+
+    const hasCompletedProfile = user
+      ? userProfileCompleted
+      : localStorage.getItem('env_budget_profile_completed') === 'true';
 
     if (!hasCompletedProfile) {
       const timer = setTimeout(() => {
         setCurrentScreen({ type: 'profile', isOnboarding: true });
       }, 400);
       return () => clearTimeout(timer);
-    } else if (!isFirstTimeIntroCompleted) {
-      const timer = setTimeout(() => {
-        handleOpenTourSafely();
-      }, 500);
-      return () => clearTimeout(timer);
+    } else {
+      const hasCompletedIntro = user
+        ? userIntroCompleted || isFirstTimeIntroCompleted
+        : isFirstTimeIntroCompleted || localStorage.getItem('env_budget_first_time_intro_done') === 'true';
+
+      if (!hasCompletedIntro) {
+        const timer = setTimeout(() => {
+          handleOpenTourSafely();
+        }, 500);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [isFirstTimeIntroCompleted]);
+  }, [authLoading, isFirstTimeIntroCompleted, profileLoading, user, userIntroCompleted, userProfileCompleted]);
 
   const handleCloseProfileScreen = () => {
     const wasOnboarding = currentScreen?.type === 'profile' && currentScreen.isOnboarding;
     setCurrentScreen(null);
     if (wasOnboarding) {
-      if (!isFirstTimeIntroCompleted) {
+      const hasCompletedIntro = user
+        ? userIntroCompleted || isFirstTimeIntroCompleted
+        : isFirstTimeIntroCompleted || localStorage.getItem('env_budget_first_time_intro_done') === 'true';
+      if (!hasCompletedIntro) {
         setTimeout(() => {
           handleOpenTourSafely();
         }, 250);
@@ -149,24 +161,6 @@ function BudgetAppContent() {
 
   const handleOpenEnvelopeDetail = (catId: string) => {
     setCurrentScreen({ type: 'envelope-detail', categoryId: catId });
-  };
-
-  const handleCommitVoiceTransaction = (params: {
-    amountPaise: number;
-    categoryId: string;
-    paymentMethod: any;
-    note?: string;
-  }) => {
-    setCurrentScreen({
-      type: 'log-expense',
-      preselectedCatId: params.categoryId,
-      initialValues: {
-        amountPaise: params.amountPaise,
-        categoryId: params.categoryId,
-        paymentMethod: params.paymentMethod,
-        note: params.note,
-      },
-    });
   };
 
   if (cloudSetupStatus === 'access_denied' && !authLoading) {
@@ -272,6 +266,7 @@ function BudgetAppContent() {
             {currentScreen.type === 'salary-arrival' && (
               <SalaryArrivalScreen
                 onBack={() => setCurrentScreen(null)}
+                initialAmountPaise={currentScreen.initialAmountPaise}
               />
             )}
 
@@ -309,8 +304,7 @@ function BudgetAppContent() {
             {currentScreen.type === 'voice-input' && (
               <VoiceInputScreen
                 onBack={() => setCurrentScreen(null)}
-                onCommitAddTransaction={handleCommitVoiceTransaction}
-                onOpenSalaryFlow={() => setCurrentScreen({ type: 'salary-arrival' })}
+                onOpenSalaryFlow={amountPaise => setCurrentScreen({ type: 'salary-arrival', initialAmountPaise: amountPaise })}
                 onOpenReconcileFlow={catId => handleOpenReconcileCategory(catId)}
                 onOpenMoveFundsFlow={(fromId, toId, amt) => handleOpenMoveFunds(fromId, toId, amt)}
               />
@@ -579,9 +573,10 @@ function BudgetAppContent() {
         onClose={() => setIsTourOpen(false)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        isFirstTime={!isFirstTimeIntroCompleted}
+        isFirstTime={user ? !(userIntroCompleted || isFirstTimeIntroCompleted) : !isFirstTimeIntroCompleted}
         onCompleteFirstTime={async () => {
-          await resetLedgerToZero(true);
+          localStorage.setItem('env_budget_first_time_intro_done', 'true');
+          await markUserIntroCompleted();
         }}
       />
     </div>

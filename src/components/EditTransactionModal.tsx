@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { Transaction, PaymentMethod } from '../types';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { ArrowLeft, X, Trash2, Check, Lock, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface EditTransactionModalProps {
@@ -65,7 +66,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
     if (isLocked) {
       // Amount and category are locked, only date and note can be updated
       updateTransaction(transaction.id, {
-        date,
+        date: clampDateInputToToday(date),
         note: note.trim() || undefined,
       });
     } else {
@@ -78,7 +79,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
         amount: finalPaise,
         category_id: categoryId,
         payment_method: paymentMethod,
-        date,
+        date: clampDateInputToToday(date),
         note: note.trim() || undefined,
       });
     }
@@ -262,7 +263,8 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                 <input
                   type="date"
                   value={date}
-                  onChange={e => setDate(e.target.value)}
+                  max={getTodayDateInputValue()}
+                  onChange={e => setDate(clampDateInputToToday(e.target.value))}
                   id="edit-date-input"
                   className="w-full px-3 py-2 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1]"
                 />

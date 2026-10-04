@@ -50,6 +50,13 @@ describe('Voice & Natural Language Intent Parser Unit Tests', () => {
     expect(res.categoryName).toBe('Groceries');
   });
 
+  it('correctly parses direct envelope top-up requests', () => {
+    const res = parseIntentWithLocalRules('Add funds 2500 to Groceries', availableCategories);
+    expect(res.intent).toBe('topup_category');
+    expect(res.amountInPaise).toBe(250000);
+    expect(res.categoryName).toBe('Groceries');
+  });
+
   it('identifies random speech and unrecognized intents as unknown', () => {
     const resHello = parseIntentWithLocalRules('Hello how are you doing', availableCategories);
     expect(resHello.intent).toBe('unknown');

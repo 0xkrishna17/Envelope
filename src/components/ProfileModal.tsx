@@ -42,7 +42,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
     else if (onClose) onClose();
   };
   const { members, activeMember, updateMemberProfile, setActiveMemberId } = useBudget();
-  const { user } = useAuth();
+  const { user, markUserProfileCompleted } = useAuth();
 
   const [name, setName] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
@@ -106,7 +106,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (e?: React.FormEvent) => {
+  const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const finalName = name.trim() || (activeMember?.name && activeMember.name !== 'You' ? activeMember.name : '') || 'You';
     const targetUserId = selectedMemberId || activeMember?.user_id;
@@ -122,6 +122,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
 
     localStorage.setItem('env_budget_profile_completed', 'true');
     localStorage.setItem('env_budget_user_name', finalName);
+    await markUserProfileCompleted();
     setSavedSuccess(true);
     setTimeout(() => {
       handleBack();

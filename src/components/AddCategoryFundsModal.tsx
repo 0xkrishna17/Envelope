@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import {
   ArrowLeft,
   X,
@@ -86,7 +87,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
   // Initialize or reset when opened
   useEffect(() => {
     if (isOpen) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTodayDateInputValue();
       setDate(today);
 
       const isInitUnallocated = initialCategoryId && unallocatedCat && initialCategoryId === unallocatedCat.id;
@@ -162,7 +163,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
         fromCategoryId: unallocatedCat.id,
         toCategoryId: selectedCategoryId,
         amountPaise: parsedAmountPaise,
-        date,
+        date: clampDateInputToToday(date),
         note: note.trim() || 'Funded from Unallocated Surplus',
       });
 
@@ -180,7 +181,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
       amountPaise: parsedAmountPaise,
       source: selectedSource,
       note: note.trim() || undefined,
-      date,
+      date: clampDateInputToToday(date),
       depositHolding,
       transferred: depositHolding !== 'primary_account',
       loggedByUserId: loggedByUserId || activeMember.user_id,
@@ -444,7 +445,8 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
                   id="topup-date"
                   type="date"
                   value={date}
-                  onChange={e => setDate(e.target.value)}
+                  max={getTodayDateInputValue()}
+                  onChange={e => setDate(clampDateInputToToday(e.target.value))}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] bg-white dark:bg-[#201C18] text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-hidden focus:ring-1 focus:ring-[#2C523B]"
                 />
               </div>

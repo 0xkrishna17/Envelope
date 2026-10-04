@@ -97,6 +97,22 @@ describe('Redux Ledger Slice Unit Tests', () => {
       expect(state2.transactions[0].reconciliation_status).toBe('n/a');
     });
 
+    it('clamps future transaction dates before storing ledger entries', () => {
+      const state = getInitialState();
+      const nextState = ledgerReducer(
+        state,
+        ledgerActions.addTransaction({
+          id: 'tx_future',
+          categoryId: 'cat_groceries',
+          amount: 100000,
+          paymentMethod: 'cash',
+          date: '2999-12-31',
+        })
+      );
+
+      expect(nextState.transactions[0].date).not.toBe('2999-12-31');
+    });
+
     it('appends an adjustment transaction instead of mutating the original transaction amount', () => {
       const state = getInitialState();
       const state1 = ledgerReducer(

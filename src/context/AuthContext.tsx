@@ -27,6 +27,10 @@ interface AuthContextType {
   logout: () => Promise<void>;
   householdId: string;
   privateLedgerId: string | null;
+  userProfileCompleted: boolean;
+  userIntroCompleted: boolean;
+  markUserProfileCompleted: () => Promise<void>;
+  markUserIntroCompleted: () => Promise<void>;
   setVerifiedHouseholdId: (id: string) => Promise<void>;
   syncStatus: 'synced' | 'syncing' | 'offline' | 'error';
   setSyncStatus: (status: 'synced' | 'syncing' | 'offline' | 'error') => void;
@@ -40,6 +44,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 interface UserProfileData {
   activeLedgerId?: unknown;
   privateLedgerId?: unknown;
+  profileCompleted?: unknown;
+  introCompleted?: unknown;
 }
 
 function normalizeEmail(email: string | null): string {
@@ -127,6 +133,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
   const [householdId, setHouseholdIdState] = useState<string>(LOCAL_HOUSEHOLD_ID);
   const [privateLedgerId, setPrivateLedgerId] = useState<string | null>(null);
+  const [userProfileCompleted, setUserProfileCompleted] = useState<boolean>(false);
+  const [userIntroCompleted, setUserIntroCompleted] = useState<boolean>(false);
 
   const persistActiveLedgerId = async (currentUser: User, ledgerId: string): Promise<string> => {
     const cloudLedgerId = normalizeCloudHouseholdDocId(ledgerId);
@@ -155,6 +163,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await persistActiveLedgerId(user, id);
   };
 
+  const markUserProfileCompleted = async () => {
+    if (!user) {
+      setUserProfileCompleted(true);
+      return;
+    }
+
+    await setDoc(
+      doc(db, 'users', user.uid),
+      {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        profileCompleted: true,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    setUserProfileCompleted(true);
+  };
+
+  const markUserIntroCompleted = async () => {
+    if (!user) {
+      setUserIntroCompleted(true);
+      return;
+    }
+
+    await setDoc(
+      doc(db, 'users', user.uid),
+      {
+        uid: user.uid,
+        email: user.email,
+        introCompleted: true,
+        introCompletedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    setUserIntroCompleted(true);
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, currentUser => {
       setUser(currentUser);
@@ -171,6 +220,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userRef = doc(db, 'users', currentUser.uid);
             const userSnap = await getDoc(userRef);
             const profile = userSnap.exists() ? (userSnap.data() as UserProfileData) : null;
+            setUserProfileCompleted(Boolean(profile?.profileCompleted));
+            setUserIntroCompleted(Boolean(profile?.introCompleted));
             let privateId = normalizeCloudHouseholdDocId(String(profile?.privateLedgerId || ''));
             let activeId = normalizeCloudHouseholdDocId(String(profile?.activeLedgerId || ''));
 
@@ -205,6 +256,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error('Error fetching/creating user profile:', err);
             setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
             setPrivateLedgerId(null);
+            setUserProfileCompleted(false);
+            setUserIntroCompleted(false);
             setAuthError(err instanceof Error ? err.message : 'Failed to prepare your private ledger.');
           } finally {
             setProfileLoading(false);
@@ -216,6 +269,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch {}
         setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
         setPrivateLedgerId(null);
+        setUserProfileCompleted(false);
+        setUserIntroCompleted(false);
         setProfileLoading(false);
       }
     });
@@ -241,6 +296,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.removeItem(AUTH_STATUS_KEY);
       setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
       setPrivateLedgerId(null);
+      setUserProfileCompleted(false);
+      setUserIntroCompleted(false);
       await signOut(auth);
     } catch (err: unknown) {
       console.error('Logout error:', err);
@@ -258,6 +315,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         logout,
         householdId,
         privateLedgerId,
+        userProfileCompleted,
+        userIntroCompleted,
+        markUserProfileCompleted,
+        markUserIntroCompleted,
         setVerifiedHouseholdId,
         syncStatus,
         setSyncStatus,
