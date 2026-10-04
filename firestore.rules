@@ -1,54 +1,298 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Households document access control based on Google Account allowlist
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function authEmail() {
+      return signedIn() && request.auth.token.email != null
+        ? request.auth.token.email
+        : '';
+    }
+
+    function isReservedHouseholdId(householdId) {
+      return householdId == 'local' || householdId == 'hh_family_ledger_main';
+    }
+
+    function householdDoc(householdId) {
+      return get(/databases/$(database)/documents/households/$(householdId));
+    }
+
+    function allowedEmailsFrom(data) {
+      return 'allowed_emails' in data && data.allowed_emails is list
+        ? data.allowed_emails
+        : [];
+    }
+
+    function incomingAllowedEmails() {
+      return 'allowed_emails' in request.resource.data && request.resource.data.allowed_emails is list
+        ? request.resource.data.allowed_emails
+        : [];
+    }
+
+    function isOwnerForData(data) {
+      return signedIn() && (
+        ('owner_uid' in data && data.owner_uid == request.auth.uid) ||
+        ('created_by' in data && data.created_by == request.auth.uid)
+      );
+    }
+
+    function isAllowedEmailForData(data) {
+      return signedIn() && authEmail() != '' && (
+        ('owner_email' in data && data.owner_email == authEmail())
+      );
+    }
+
+    function isMemberForData(data) {
+      return signedIn()
+        && 'member_uids' in data
+        && data.member_uids is list
+        && request.auth.uid in data.member_uids;
+    }
+
+    function isAuthorizedForData(data) {
+      return isOwnerForData(data) || isMemberForData(data) || isAllowedEmailForData(data);
+    }
+
+    function householdDocAfter(householdId) {
+      return getAfter(/databases/$(database)/documents/households/$(householdId));
+    }
+
+    function isAuthorizedForHousehold(householdId) {
+      return signedIn()
+        && !isReservedHouseholdId(householdId)
+        && exists(/databases/$(database)/documents/households/$(householdId))
+        && isAuthorizedForData(householdDoc(householdId).data);
+    }
+
+    function isAuthorizedForHouseholdAfter(householdId) {
+      return signedIn()
+        && !isReservedHouseholdId(householdId)
+        && isAuthorizedForData(householdDocAfter(householdId).data);
+    }
+
+    function isCreatingOwnHousehold(householdId) {
+      return signedIn()
+        && !isReservedHouseholdId(householdId)
+        && request.resource.data.id == householdId
+        && 'owner_uid' in request.resource.data
+        && request.resource.data.owner_uid == request.auth.uid
+        && 'created_by' in request.resource.data
+        && request.resource.data.created_by == request.auth.uid
+        && 'owner_email' in request.resource.data
+        && request.resource.data.owner_email == authEmail()
+        && authEmail() in incomingAllowedEmails()
+        && 'member_uids' in request.resource.data
+        && request.resource.data.member_uids is list
+        && request.auth.uid in request.resource.data.member_uids;
+    }
+
+    function ownerFieldsUnchanged() {
+      return request.resource.data.id == resource.data.id
+        && request.resource.data.owner_uid == resource.data.owner_uid
+        && request.resource.data.owner_email == resource.data.owner_email
+        && request.resource.data.created_by == resource.data.created_by
+        && request.resource.data.created_at == resource.data.created_at;
+    }
+
+    function aclUnchanged() {
+      return ownerFieldsUnchanged()
+        && request.resource.data.allowed_emails == resource.data.allowed_emails
+        && request.resource.data.member_uids == resource.data.member_uids;
+    }
+
+    function isKnownLedgerSubcollection(subcollection) {
+      return subcollection in [
+        'members',
+        'categories',
+        'salaryEvents',
+        'allocations',
+        'transactions',
+        'reconciliations',
+        'reconciliationLines',
+        'envelopeTransfers'
+      ];
+    }
+
+    function subcollectionDocMatchesHouseholdPath(householdId) {
+      return !('household_id' in request.resource.data)
+        || request.resource.data.household_id == householdId;
+    }
+
+    function existingSubcollectionDocMatchesHouseholdPath(householdId) {
+      return !('household_id' in resource.data)
+        || resource.data.household_id == householdId;
+    }
+
+    function memberSoftDeletesOwnMemberDoc(householdId, subcollection) {
+      return subcollection == 'members'
+        && isMemberForData(householdDoc(householdId).data)
+        && !isOwnerForData(householdDoc(householdId).data)
+        && resource.data.user_id == request.auth.uid
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['deleted_at']);
+    }
+
+    function inviteImmutableFieldsUnchanged() {
+      return request.resource.data.household_id == resource.data.household_id
+        && request.resource.data.household_name == resource.data.household_name
+        && request.resource.data.inviter_uid == resource.data.inviter_uid
+        && request.resource.data.inviter_email == resource.data.inviter_email
+        && request.resource.data.invitee_email == resource.data.invitee_email
+        && request.resource.data.created_at == resource.data.created_at;
+    }
+
+    function isInvitee(data) {
+      return signedIn() && authEmail() != '' && data.invitee_email == authEmail();
+    }
+
+    function isInvitationOwner(data) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/households/$(data.household_id))
+        && isOwnerForData(householdDoc(data.household_id).data);
+    }
+
+    function inviteeAcceptOrDeclineOnly() {
+      return isInvitee(resource.data)
+        && resource.data.status == 'pending'
+        && inviteImmutableFieldsUnchanged()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'invitee_uid', 'responded_at', 'updated_at', 'updatedAt'])
+        && request.resource.data.status in ['accepted', 'declined']
+        && (!('invitee_uid' in request.resource.data) || request.resource.data.invitee_uid == request.auth.uid);
+    }
+
+    function acceptedInvitationForHousehold(householdId) {
+      return existsAfter(/databases/$(database)/documents/householdInvitations/$(householdId + '__' + authEmail()))
+        && getAfter(/databases/$(database)/documents/householdInvitations/$(householdId + '__' + authEmail())).data.status == 'accepted'
+        && getAfter(/databases/$(database)/documents/householdInvitations/$(householdId + '__' + authEmail())).data.invitee_uid == request.auth.uid;
+    }
+
+    function inviteeAddsOnlySelfToHousehold(householdId) {
+      return signedIn()
+        && authEmail() != ''
+        && acceptedInvitationForHousehold(householdId)
+        && ownerFieldsUnchanged()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['allowed_emails', 'member_uids', 'updated_at', 'updated_by_uid'])
+        && resource.data.member_uids is list
+        && resource.data.allowed_emails is list
+        && request.resource.data.member_uids is list
+        && request.resource.data.allowed_emails is list
+        && request.resource.data.member_uids.hasAll(resource.data.member_uids)
+        && request.resource.data.allowed_emails.hasAll(resource.data.allowed_emails)
+        && request.resource.data.member_uids.size() == resource.data.member_uids.size() + 1
+        && request.resource.data.allowed_emails.size() == resource.data.allowed_emails.size() + 1
+        && request.auth.uid in request.resource.data.member_uids
+        && authEmail() in request.resource.data.allowed_emails;
+    }
+
+    function memberRemovesOnlySelfFromHousehold() {
+      return signedIn()
+        && authEmail() != ''
+        && isMemberForData(resource.data)
+        && !isOwnerForData(resource.data)
+        && ownerFieldsUnchanged()
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['allowed_emails', 'member_uids', 'updated_at', 'updated_by_uid'])
+        && resource.data.member_uids is list
+        && resource.data.allowed_emails is list
+        && request.resource.data.member_uids is list
+        && request.resource.data.allowed_emails is list
+        && resource.data.member_uids.hasAll(request.resource.data.member_uids)
+        && resource.data.allowed_emails.hasAll(request.resource.data.allowed_emails)
+        && request.resource.data.member_uids.size() == resource.data.member_uids.size() - 1
+        && request.resource.data.allowed_emails.size() == resource.data.allowed_emails.size() - 1
+        && !(request.auth.uid in request.resource.data.member_uids)
+        && !(authEmail() in request.resource.data.allowed_emails);
+    }
+
+    function profileLedgerAllowed(ledgerId) {
+      return !(ledgerId is string)
+        || (
+          !isReservedHouseholdId(ledgerId)
+          && existsAfter(/databases/$(database)/documents/households/$(ledgerId))
+          && isAuthorizedForData(getAfter(/databases/$(database)/documents/households/$(ledgerId)).data)
+        );
+    }
+
+    function userProfileLedgerIdsAllowed() {
+      return profileLedgerAllowed(request.resource.data.privateLedgerId)
+        && (
+          profileLedgerAllowed(request.resource.data.activeLedgerId) ||
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && request.resource.data.activeLedgerId == resource.data.privateLedgerId
+          )
+        );
+    }
+
     match /households/{householdId} {
-      // Helper to check if the current user has access to this household
-      function isUserAuthorized() {
-        return request.auth != null && (
-          (request.auth.token.email != null && (
-            ('allowed_emails' in resource.data && request.auth.token.email in resource.data.allowed_emails) ||
-            ('household' in resource.data && 'allowed_emails' in resource.data.household && request.auth.token.email in resource.data.household.allowed_emails) ||
-            ('owner_email' in resource.data && resource.data.owner_email == request.auth.token.email) ||
-            ('household' in resource.data && 'owner_email' in resource.data.household && resource.data.household.owner_email == request.auth.token.email)
-          )) ||
-          ('created_by' in resource.data && resource.data.created_by == request.auth.uid) ||
-          ('household' in resource.data && 'created_by' in resource.data.household && resource.data.household.created_by == request.auth.uid)
+      allow create: if isCreatingOwnHousehold(householdId);
+      allow read: if signedIn()
+        && !isReservedHouseholdId(householdId)
+        && isAuthorizedForData(resource.data);
+      allow update: if signedIn()
+        && !isReservedHouseholdId(householdId)
+        && ownerFieldsUnchanged()
+        && (
+          isOwnerForData(resource.data) ||
+          (isMemberForData(resource.data) && aclUnchanged()) ||
+          inviteeAddsOnlySelfToHousehold(householdId) ||
+          memberRemovesOnlySelfFromHousehold()
         );
-      }
+      allow delete: if signedIn()
+        && !isReservedHouseholdId(householdId)
+        && isOwnerForData(resource.data);
 
-      // Check if this household has established an allowlist or owner restriction
-      function hasAccessRestrictions() {
-        return (
-          ('allowed_emails' in resource.data && resource.data.allowed_emails.size() > 0) ||
-          ('household' in resource.data && 'allowed_emails' in resource.data.household && resource.data.household.allowed_emails.size() > 0) ||
-          ('owner_email' in resource.data && resource.data.owner_email != null && resource.data.owner_email != '') ||
-          ('household' in resource.data && 'owner_email' in resource.data.household && resource.data.household.owner_email != null && resource.data.household.owner_email != '')
-        );
-      }
-
-      // 1. Default preview/demo households are open
-      // 2. Creating a new document is permitted
-      // 3. Open households without restrictions are permitted
-      // 4. Restricted households require authorized Google account
-      allow read, write: if
-        householdId == 'hh_family_ledger_main' ||
-        householdId.matches('hh_demo.*') ||
-        householdId.matches('hh_preview.*') ||
-        resource == null ||
-        !hasAccessRestrictions() ||
-        isUserAuthorized();
-
-      match /{document=**} {
-        allow read, write: if true;
+      match /{subcollection}/{documentId} {
+        allow read: if isKnownLedgerSubcollection(subcollection)
+          && isAuthorizedForHousehold(householdId);
+        allow create: if isKnownLedgerSubcollection(subcollection)
+          && isAuthorizedForHouseholdAfter(householdId)
+          && subcollectionDocMatchesHouseholdPath(householdId);
+        allow update: if isKnownLedgerSubcollection(subcollection)
+          && (
+            (
+              isAuthorizedForHouseholdAfter(householdId)
+              && subcollectionDocMatchesHouseholdPath(householdId)
+            ) || memberSoftDeletesOwnMemberDoc(householdId, subcollection)
+          );
+        allow delete: if isKnownLedgerSubcollection(subcollection)
+          && isAuthorizedForHousehold(householdId)
+          && existingSubcollectionDocMatchesHouseholdPath(householdId);
       }
     }
 
-    // User profile mappings
+    match /householdInvitations/{invitationId} {
+      allow create: if signedIn()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.inviter_uid == request.auth.uid
+        && request.resource.data.inviter_email == authEmail()
+        && request.resource.data.invitee_email is string
+        && request.resource.data.household_id is string
+        && isAuthorizedForHousehold(request.resource.data.household_id)
+        && isOwnerForData(householdDoc(request.resource.data.household_id).data);
+
+      allow read: if signedIn()
+        && (isInvitee(resource.data) || isInvitationOwner(resource.data));
+
+      allow update: if signedIn()
+        && (
+          inviteeAcceptOrDeclineOnly() ||
+          (
+            isInvitationOwner(resource.data)
+            && inviteImmutableFieldsUnchanged()
+            && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'updated_at', 'updatedAt'])
+            && request.resource.data.status == 'revoked'
+          )
+        );
+
+      allow delete: if signedIn() && isInvitationOwner(resource.data);
+    }
+
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow write: if signedIn()
+        && request.auth.uid == userId
+        && userProfileLedgerIdsAllowed();
     }
   }
 }
-
-

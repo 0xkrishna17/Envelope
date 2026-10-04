@@ -2,22 +2,21 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
 import { useApiLoading } from '../context/ApiLoadingContext';
+import {
+  formatLastCloudSync,
+  getCloudSyncDescription,
+  getCloudSyncHeadline,
+} from '../utils/syncDisplay';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
 import { ResetDataWarningModal } from './ResetDataWarningModal';
 import {
   Cloud,
-  CheckCircle2,
   RefreshCw,
-  Copy,
-  Check,
   LogOut,
   Smartphone,
   ExternalLink,
   ShieldCheck,
-  Users,
   Loader2,
-  Share2,
-  Eye,
   ArrowLeft,
   Database,
   Lock,
@@ -26,23 +25,34 @@ import {
 
 interface CloudSyncScreenProps {
   onBack?: () => void;
-  onNavigateToInvite?: () => void;
 }
 
 export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
   onBack,
-  onNavigateToInvite,
 }) => {
-  const { user, signInWithGoogle, logout, householdId, setHouseholdId, authError } = useAuth();
-  const { cloudSyncStatus, lastCloudSync, syncNow, household, resetLedgerToZero } = useBudget();
+  const { user, signInWithGoogle, logout, authError } = useAuth();
+  const {
+    cloudSyncStatus,
+    cloudSetupStatus,
+    lastCloudSync,
+    syncNow,
+    household,
+    resetLedgerToZero,
+    pendingInvitations,
+    sentInvitations,
+    acceptInvitation,
+    declineInvitation,
+    revokeInvitation,
+    leaveCurrentHousehold,
+    isOwner,
+  } = useBudget();
   const { startApiCall, showToast } = useApiLoading();
-  const [customHouseholdId, setCustomHouseholdId] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSyncingManually, setIsSyncingManually] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isResetCleanModalOpen, setIsResetCleanModalOpen] = useState(false);
+  const [invitationIdToAccept, setInvitationIdToAccept] = useState<string | null>(null);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -51,14 +61,16 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
     try {
       await signInWithGoogle();
       showToast('Signed in with Google successfully', 'success');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Sign-in error:', err);
-      if (err.code === 'auth/popup-blocked' || err.message?.includes('popup')) {
+      const code = typeof err === 'object' && err !== null && 'code' in err ? String(err.code) : '';
+      const message = err instanceof Error ? err.message : 'Failed to sign in with Google';
+      if (code === 'auth/popup-blocked' || message.includes('popup')) {
         setErrorMessage(
           'Popup was blocked by the browser iframe. Click "Open in New Tab" below to sign in with Google.'
         );
       } else {
-        setErrorMessage(err.message || 'Failed to sign in with Google');
+        setErrorMessage(message);
       }
     } finally {
       setIsSigningIn(false);
@@ -66,47 +78,46 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
     }
   };
 
-  const handleCopyHouseholdId = () => {
-    navigator.clipboard.writeText(householdId);
-    setCopied(true);
-    showToast('Household ID copied to clipboard', 'info');
-    setTimeout(() => setCopied(false), 2000);
+  const handleInvitationAction = async (
+    action: () => Promise<{ ok: boolean; message?: string }>,
+    successMessage: string
+  ) => {
+    const result = await action();
+    showToast(result.ok ? successMessage : result.message || 'Household request action failed.', result.ok ? 'success' : 'error');
   };
 
-  const handleCopyPublicLink = () => {
-    let origin = window.location.origin;
-    if (origin.includes('ais-dev-')) {
-      origin = origin.replace('ais-dev-', 'ais-pre-');
-    }
-    const publicUrl = `${origin}/?household=${encodeURIComponent(householdId)}`;
-    navigator.clipboard.writeText(publicUrl);
-    setCopiedLink(true);
-    showToast('Public partner link copied!', 'success');
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  const handleSwitchHousehold = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = customHouseholdId.trim();
-    if (clean) {
-      setHouseholdId(clean);
-      setCustomHouseholdId('');
-      showToast(`Connected to household ${clean}`, 'success');
-    }
+  const handleLeaveHousehold = async () => {
+    const result = await leaveCurrentHousehold();
+    showToast(result.ok ? 'You left the household and returned to your private ledger.' : result.message, result.ok ? 'success' : 'error');
   };
 
   const handleManualSync = async () => {
+    if (!user) {
+      showToast('Sign in with Google before syncing to cloud.', 'info');
+      return;
+    }
+    if (cloudSetupStatus !== 'verified') {
+      showToast('Create or join a cloud household before syncing.', 'info');
+      return;
+    }
+
     setIsSyncingManually(true);
     const stopLoader = startApiCall('Syncing ledger with Firestore...');
     try {
-      await syncNow();
-      showToast('Envelopes synced to cloud', 'success');
+      const result = await syncNow();
+      if (result.ok) {
+        showToast('Envelopes synced to cloud', 'success');
+      } else {
+        showToast(result.message, 'error');
+      }
     } finally {
       setIsSyncingManually(false);
       stopLoader();
     }
   };
 
+  const isCloudVerified = cloudSetupStatus === 'verified';
+  const canLeaveHousehold = Boolean(user && isCloudVerified && !isOwner);
   const isIframe = window.self !== window.top;
 
   return (
@@ -142,9 +153,9 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
 
         <button
           onClick={handleManualSync}
-          disabled={isSyncingManually}
+          disabled={!user || isSyncingManually}
           id="sync-now-top-btn"
-          className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] hover:opacity-90 flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shadow-xs"
+          className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] hover:opacity-90 flex items-center gap-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-xs"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isSyncingManually ? 'animate-spin' : ''}`} />
           <span>Sync Now</span>
@@ -184,22 +195,18 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
             </div>
 
             <div className="text-base font-bold text-[#1F1B16] dark:text-[#EDE8E1]">
-              {cloudSyncStatus === 'synced'
-                ? 'Bidirectional Cloud Mirror Active'
-                : cloudSyncStatus === 'syncing'
-                ? 'Uploading Ledger Updates...'
-                : 'Working Offline (Local Storage Active)'}
+              {getCloudSyncHeadline(cloudSyncStatus)}
             </div>
 
             <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1.5 leading-relaxed">
-              Every expense, salary event, envelope transfer, and card reconciliation auto-syncs across your partner's devices with sub-second latency.
+              {getCloudSyncDescription(cloudSyncStatus)}
             </p>
           </div>
 
           <div className="mt-4 pt-3 border-t border-[#E8E3DA] dark:border-[#2D2823] flex items-center justify-between text-xs text-[#78716C] dark:text-[#A8A29E]">
             <span>Last synchronized:</span>
             <span className="font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-              {lastCloudSync || 'Just now'}
+              {formatLastCloudSync(lastCloudSync)}
             </span>
           </div>
         </div>
@@ -250,7 +257,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
             ) : (
               <div className="flex flex-col gap-2">
                 <p className="text-xs text-[#78716C] dark:text-[#A8A29E] leading-relaxed">
-                  Sign in with your Google Account to secure your household ledger and automatically claim co-ownership.
+                  Sign in with your Google Account to create or open your private cloud ledger. Shared households appear only after an owner invites this email.
                 </p>
 
                 <button
@@ -315,131 +322,179 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
         </div>
       </div>
 
-      {/* Household Ledger ID & Sharing */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col gap-3">
-        <div className="flex items-center justify-between">
+      {cloudSetupStatus === 'access_denied' && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#FEF2F2] dark:bg-[#2A1212] border border-[#FCA5A5] dark:border-[#7F1D1D] shadow-xs flex items-start gap-3">
+          <Lock className="w-4 h-4 text-[#B91C1C] mt-0.5" />
           <div>
-            <h2 className="text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-              Shared Household Identifier & Partner Link
-            </h2>
-            <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-              Both devices connect to this unique cloud ledger identifier.
+            <h2 className="text-sm font-semibold text-[#B91C1C] dark:text-[#FCA5A5]">Access not verified</h2>
+            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1 leading-relaxed">
+              This Google account is not authorized for the selected cloud ledger. Manual IDs are ignored and Firestore rules enforce access.
             </p>
           </div>
-          {onNavigateToInvite && (
+        </div>
+      )}
+
+      {user && pendingInvitations.length > 0 && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#EFF6FF] dark:bg-[#111827] border border-[#BFDBFE] dark:border-[#1D4ED8] shadow-xs flex flex-col gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-[#1D4ED8] dark:text-[#93C5FD]">Household requests</h2>
+            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1">
+              Accept a request to switch from your private ledger into a shared household.
+            </p>
+          </div>
+          {pendingInvitations.map(invitation => (
+            <div key={invitation.id} className="p-3 rounded-xl bg-white/70 dark:bg-[#1A1714] border border-[#BFDBFE] dark:border-[#1D4ED8] flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="text-xs">
+                <div className="font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">{invitation.household_name}</div>
+                <div className="text-[#78716C] dark:text-[#A8A29E]">Invited by {invitation.inviter_email}</div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInvitationIdToAccept(invitation.id)}
+                  className="px-3 py-1.5 rounded-lg bg-[#4E785E] text-white text-xs font-semibold cursor-pointer"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInvitationAction(() => declineInvitation(invitation.id), 'Household request declined.')}
+                  className="px-3 py-1.5 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-semibold cursor-pointer"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ResetDataWarningModal
+        isOpen={Boolean(invitationIdToAccept)}
+        onClose={() => setInvitationIdToAccept(null)}
+        onConfirm={async () => {
+          if (!invitationIdToAccept) return;
+          await handleInvitationAction(() => acceptInvitation(invitationIdToAccept), 'Household request accepted. Your dashboard now shows the shared household.');
+          setInvitationIdToAccept(null);
+        }}
+        title="Join Shared Household?"
+        description="Accepting this request switches your active dashboard from your private ledger to the shared household. Your private ledger remains saved and will be restored if you leave the household later."
+        confirmText="Yes, Join Household"
+        isZeroReset={false}
+        bulletPoints={[
+          'Your current private dashboard will no longer be the active view',
+          'The shared household data will replace what you see after accepting',
+          'Your private ledger stays attached to your Google account',
+          'Decline if you want to keep using only your own private household',
+        ]}
+      />
+
+      <ResetDataWarningModal
+        isOpen={isLeaveModalOpen}
+        onClose={() => setIsLeaveModalOpen(false)}
+        onConfirm={async () => {
+          await handleLeaveHousehold();
+          setIsLeaveModalOpen(false);
+        }}
+        title="Leave Shared Household?"
+        description="Leaving removes your Google account from this shared household and switches your active dashboard back to your private ledger. The household owner keeps their data."
+        confirmText="Yes, Leave Household"
+        isZeroReset={false}
+        bulletPoints={[
+          'You will lose access to this shared household after leaving',
+          'Your private ledger becomes the active dashboard again',
+          'The owner can invite you again later by Google email',
+          'The household owner cannot leave; they must reset or manage members instead',
+        ]}
+      />
+
+      {cloudSetupStatus === 'verified' && (
+        <>
+      {/* Household Membership & Requests */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">Members & requests</h2>
+            <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+              Add a Google email to send a join request. Internal ledger IDs are never shared.
+            </p>
+          </div>
+          {canLeaveHousehold && (
             <button
-              onClick={onNavigateToInvite}
-              className="text-xs text-[#4E785E] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+              type="button"
+              onClick={() => setIsLeaveModalOpen(true)}
+              className="px-3 py-2 rounded-xl border border-[#B85D43] text-[#B85D43] text-xs font-bold cursor-pointer hover:bg-[#F9ECE8] dark:hover:bg-[#331D16]"
             >
-              <Users className="w-3.5 h-3.5" />
-              <span>Invite Partner Screen →</span>
+              Leave Household
             </button>
           )}
         </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className="flex-1 px-3 py-2 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#E8E3DA] dark:border-[#2D2823] rounded-xl text-xs font-mono select-all truncate">
-            {householdId}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleCopyHouseholdId}
-              id="copy-household-id-screen-btn"
-              className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-white dark:bg-[#28221D] border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs hover:bg-[#EFEAE1] transition-colors cursor-pointer"
-            >
-              {copied ? <Check className="w-3.5 h-3.5 text-[#4E785E]" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Copied' : 'Copy ID'}</span>
-            </button>
-
-            <button
-              onClick={handleCopyPublicLink}
-              id="copy-partner-link-screen-btn"
-              className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs hover:opacity-90 transition-opacity cursor-pointer"
-              title="Copy shareable link for partner"
-            >
-              {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
-              <span>{copiedLink ? 'Link Copied!' : 'Share Partner Link'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Google Account Allowlist & Access Control */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs">
         <HouseholdAccessManager compact={true} />
+        {sentInvitations.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {sentInvitations.map(invitation => (
+              <div key={invitation.id} className="flex items-center justify-between gap-2 text-xs p-2 rounded-lg bg-[#EFEAE1]/60 dark:bg-[#28221D]/60">
+                <span className="text-[#78716C] dark:text-[#A8A29E]">Pending request to {invitation.invitee_email}</span>
+                <button
+                  type="button"
+                  onClick={() => handleInvitationAction(() => revokeInvitation(invitation.id), 'Household request revoked.')}
+                  className="text-[#B85D43] font-semibold cursor-pointer"
+                >
+                  Revoke
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Advanced Household Management */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col gap-4">
-        <div>
-          <h2 className="text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-            Connect to Existing Household or Create New
-          </h2>
-          <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-            Have an existing ledger ID from your partner? Enter it below to connect.
-          </p>
-        </div>
+      {isOwner && (
+        <>
+          {/* Clear Firebase Cloud Store & Start Clean */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[#B85D43] flex items-center gap-1.5">
+                <RotateCcw className="w-4 h-4 text-[#B85D43]" />
+                <span>Clear Firebase Cloud Store & Start Clean</span>
+              </h2>
+              <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-0.5">
+                Owner-only reset that wipes transactions, salary arrivals, and balances from Cloud Firestore and local storage so you can start fresh with ₹0.
+              </p>
+            </div>
 
-        <form onSubmit={handleSwitchHousehold} className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            value={customHouseholdId}
-            onChange={e => setCustomHouseholdId(e.target.value)}
-            placeholder="e.g. hh_family_ledger_main"
-            className="flex-1 px-3 py-2 text-xs bg-white dark:bg-black/20 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl focus:outline-hidden focus:ring-1 focus:ring-[#486B88]"
+            <button
+              type="button"
+              onClick={() => setIsResetCleanModalOpen(true)}
+              id="clear-cloud-store-btn"
+              className="px-4 py-2 rounded-xl bg-[#B85D43] hover:bg-[#A04D35] text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Clear Cloud & Reset (₹0)</span>
+            </button>
+          </div>
+
+          <ResetDataWarningModal
+            isOpen={isResetCleanModalOpen}
+            onClose={() => setIsResetCleanModalOpen(false)}
+            onConfirm={async () => {
+              const result = await resetLedgerToZero(false);
+              showToast(result.ok ? 'Cloud store and local ledger cleared to ₹0' : result.message || 'Reset failed.', result.ok ? 'success' : 'error');
+            }}
+            title="Clear Cloud Database & Start Clean?"
+            description="This owner-only action permanently resets all transactions, envelope balances, and credit card debts to ₹0 in Firebase Firestore and locally. Your envelope categories and Google account permissions remain intact."
+            confirmText="Yes, Clear Cloud Store"
+            isZeroReset={true}
+            bulletPoints={[
+              'All envelope balances reset to ₹0 available',
+              'All transaction and salary histories wiped from Firebase Firestore',
+              'Pending credit card payback reset to ₹0',
+              'Ready immediately for your fresh real salary allocation',
+            ]}
           />
-          <button
-            type="submit"
-            disabled={!customHouseholdId.trim()}
-            className="px-4 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold disabled:opacity-40 cursor-pointer shadow-xs"
-          >
-            Connect to Ledger
-          </button>
-        </form>
-      </div>
-
-      {/* Clear Firebase Cloud Store & Start Clean */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-[#B85D43] flex items-center gap-1.5">
-            <RotateCcw className="w-4 h-4 text-[#B85D43]" />
-            <span>Clear Firebase Cloud Store & Start Clean</span>
-          </h2>
-          <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-0.5">
-            Wipes all transactions, salary arrivals, and balances from both Cloud Firestore and local storage so you can start fresh with ₹0.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setIsResetCleanModalOpen(true)}
-          id="clear-cloud-store-btn"
-          className="px-4 py-2 rounded-xl bg-[#B85D43] hover:bg-[#A04D35] text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Clear Cloud & Reset (₹0)</span>
-        </button>
-      </div>
-
-      <ResetDataWarningModal
-        isOpen={isResetCleanModalOpen}
-        onClose={() => setIsResetCleanModalOpen(false)}
-        onConfirm={async () => {
-          await resetLedgerToZero(false);
-          showToast('Cloud store and local ledger cleared to ₹0', 'success');
-        }}
-        title="Clear Cloud Database & Start Clean?"
-        description="This will permanently reset all transactions, envelope balances, and credit card debts to ₹0 in Firebase Firestore and locally. Your envelope categories and Google account permissions remain intact."
-        confirmText="Yes, Clear Cloud Store"
-        isZeroReset={true}
-        bulletPoints={[
-          'All envelope balances reset to ₹0 available',
-          'All transaction and salary histories wiped from Firebase Firestore',
-          'Pending credit card payback reset to ₹0',
-          'Ready immediately for your fresh real salary allocation',
-        ]}
-      />
+        </>
+      )}
+        </>
+      )}
 
       {/* Multi-Device Architecture Notes */}
       <div className="p-4 rounded-2xl bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 border border-[#E8E3DA] dark:border-[#2D2823] grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-[#78716C] dark:text-[#A8A29E]">

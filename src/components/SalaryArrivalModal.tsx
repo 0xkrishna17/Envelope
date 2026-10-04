@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { ArrowLeft, Check, Plus, Minus, Landmark, Save, Percent, Scale, RefreshCw } from 'lucide-react';
+import { isWholeRupeeInput, parseWholeRupeeInput } from '../utils/wholeRupeeInput';
 
 interface SalaryArrivalModalProps {
   isOpen?: boolean;
@@ -124,12 +125,13 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
     divideAmountByPercentages,
   ]);
 
-  // When total salary amount changes: auto-divide immediately!
+  // When total salary amount changes: auto-divide immediately.
+  // Salary flow supports any whole rupee amount; decimals/floating values are rejected.
   const handleSalaryAmountChange = (newAmountStr: string) => {
-    // Prevent negative salary values
-    const cleanStr = newAmountStr.replace(/[^0-9.]/g, '');
-    setSalaryAmountRupees(cleanStr);
-    const totalRupees = parseFloat(cleanStr) || 0;
+    if (!isWholeRupeeInput(newAmountStr)) return;
+
+    setSalaryAmountRupees(newAmountStr);
+    const totalRupees = parseWholeRupeeInput(newAmountStr);
     const nextDraft = divideAmountByPercentages(totalRupees, percentages, nonUnallocatedCategories);
     setAllocationsDraft(nextDraft);
   };
@@ -138,36 +140,40 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
   const handleEqualizePercentages = () => {
     const equalPcts = getEqualPercentages(nonUnallocatedCategories);
     setPercentages(equalPcts);
-    const totalRupees = parseFloat(salaryAmountRupees) || 0;
+    const totalRupees = parseWholeRupeeInput(salaryAmountRupees);
     const nextDraft = divideAmountByPercentages(totalRupees, equalPcts, nonUnallocatedCategories);
     setAllocationsDraft(nextDraft);
   };
 
   // User edits an envelope percentage directly
   const handlePercentageChange = (catId: string, newPctVal: number) => {
-    const safePct = Math.max(0, Math.min(100, Math.round(newPctVal * 10) / 10));
+    const safePct = Math.max(0, Math.min(100, newPctVal));
     const nextPcts = { ...percentages, [catId]: safePct };
     setPercentages(nextPcts);
 
-    const totalRupees = parseFloat(salaryAmountRupees) || 0;
+    const totalRupees = parseWholeRupeeInput(salaryAmountRupees);
     setAllocationsDraft(prev => ({
       ...prev,
       [catId]: Math.round(totalRupees * (safePct / 100)),
     }));
   };
 
-  // User edits an envelope rupee amount directly
-  const handleUpdateCategoryAmount = (catId: string, value: number) => {
-    const safeVal = Math.max(0, value);
+  // User edits an envelope rupee amount directly.
+  // Supports any whole rupee value; decimals/floating values are rejected.
+  const handleUpdateCategoryAmount = (catId: string, value: number | string) => {
+    const parsedValue = typeof value === 'string' ? parseWholeRupeeInput(value) : value;
+    if (typeof value === 'string' && !isWholeRupeeInput(value)) return;
+
+    const safeVal = Math.max(0, parsedValue);
     setAllocationsDraft(prev => ({
       ...prev,
       [catId]: safeVal,
     }));
 
     // Sync percentage
-    const totalRupees = parseFloat(salaryAmountRupees) || 0;
+    const totalRupees = parseWholeRupeeInput(salaryAmountRupees);
     if (totalRupees > 0) {
-      const derivedPct = Number(((safeVal / totalRupees) * 100).toFixed(1));
+      const derivedPct = Number(((safeVal / totalRupees) * 100).toFixed(4));
       setPercentages(prev => ({
         ...prev,
         [catId]: derivedPct,
@@ -314,9 +320,9 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
                 <span className="absolute left-3 text-lg font-serif text-[#78716C]">₹</span>
                 <input
                   id="salary-amount-input"
-                  type="number"
-                  step="any"
-                  min="0"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   placeholder="150000"
                   value={salaryAmountRupees}
                   onChange={e => handleSalaryAmountChange(e.target.value)}
@@ -435,10 +441,11 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
                       <div className="flex items-center gap-1 bg-[#FAF7F2] dark:bg-[#1A1714] px-2 py-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F]">
                         <input
                           type="number"
-                          step="0.5"
+                          step="any"
                           min="0"
                           max="100"
                           value={currentPct || ''}
+
                           onChange={e => handlePercentageChange(cat.id, parseFloat(e.target.value) || 0)}
                           id={`alloc-pct-${cat.id}`}
                           aria-label={`${cat.name} percentage`}
@@ -460,11 +467,11 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
                         <div className="relative w-24">
                           <span className="absolute left-2 top-1.5 text-xs text-[#78716C]">₹</span>
                           <input
-                            type="number"
-                            step="100"
-                            min="0"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             value={currentVal || ''}
-                            onChange={e => handleUpdateCategoryAmount(cat.id, parseFloat(e.target.value) || 0)}
+                            onChange={e => handleUpdateCategoryAmount(cat.id, e.target.value)}
                             id={`alloc-input-${cat.id}`}
                             className="w-full pl-5 pr-1.5 py-1 text-xs font-amount font-semibold bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-right text-[#1F1B16] dark:text-[#EDE8E1]"
                           />

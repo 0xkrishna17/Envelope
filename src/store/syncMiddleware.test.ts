@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { syncMiddleware, STORAGE_KEYS } from './syncMiddleware';
+import { syncMiddleware, configureSyncAuth, flushSyncNow } from './syncMiddleware';
 import { ledgerActions } from './ledgerSlice';
 import { RootState } from './index';
 import { INITIAL_HOUSEHOLD, INITIAL_MEMBERS, INITIAL_CATEGORIES } from '../data/initialData';
+import { DEFAULT_HOUSEHOLD_DOC_ID } from '../sync/householdIdentity';
+import { cacheKeyForLocalLedger } from '../sync/localCache';
 
 // Provide globalThis.localStorage mock for Node test environment
 const storageStore: Record<string, string> = {};
@@ -29,6 +31,7 @@ describe('syncMiddleware Unit Tests', () => {
 
   beforeEach(() => {
     localStorageMock.clear();
+    configureSyncAuth({ uid: null, email: null, isAccessAllowed: false });
     mockState = {
       ledger: {
         household: INITIAL_HOUSEHOLD,
@@ -40,7 +43,6 @@ describe('syncMiddleware Unit Tests', () => {
         reconciliations: [],
         reconciliationLines: [],
         envelopeTransfers: [],
-        invites: [],
         selectedMonth: '2026-09',
         activeMemberId: 'usr_me',
         pushSettings: {
@@ -52,7 +54,7 @@ describe('syncMiddleware Unit Tests', () => {
           created_at: '2026-09-01T00:00:00Z',
         },
         firstTimeIntroCompleted: false,
-        householdId: 'hh_main',
+        householdId: DEFAULT_HOUSEHOLD_DOC_ID,
         syncStatus: 'idle',
         lastCloudSync: null,
         permissionDenied: false,
@@ -73,7 +75,7 @@ describe('syncMiddleware Unit Tests', () => {
     mockState.ledger.transactions = [
       {
         id: 'tx_1',
-        household_id: 'hh_main',
+        household_id: DEFAULT_HOUSEHOLD_DOC_ID,
         category_id: 'cat_groceries',
         amount: 250000,
         date: '2026-09-15',
@@ -96,9 +98,9 @@ describe('syncMiddleware Unit Tests', () => {
 
     expect(next).toHaveBeenCalledWith(action);
 
-    const savedTx = JSON.parse(localStorage.getItem(STORAGE_KEYS.TRANSACTIONS) || '[]');
-    expect(savedTx.length).toBe(1);
-    expect(savedTx[0].amount).toBe(250000);
+    const cached = JSON.parse(localStorage.getItem(cacheKeyForLocalLedger()) || '{}');
+    expect(cached.ledger.transactions.length).toBe(1);
+    expect(cached.ledger.transactions[0].amount).toBe(250000);
   });
 
   it('skips localStorage writes for internal sync status actions to avoid redundant overhead', () => {
@@ -107,8 +109,8 @@ describe('syncMiddleware Unit Tests', () => {
     syncMiddleware(mockStore)(next)(action);
 
     expect(next).toHaveBeenCalledWith(action);
-    // LocalStorage should not have been updated with categories or transactions
-    expect(localStorage.getItem(STORAGE_KEYS.CATEGORIES)).toBeNull();
+    // LocalStorage should not have been updated with scoped ledger cache
+    expect(localStorage.getItem(cacheKeyForLocalLedger())).toBeNull();
   });
 
   it('writes reset flags to localStorage when resetLedgerToZero is dispatched', () => {
@@ -126,5 +128,25 @@ describe('syncMiddleware Unit Tests', () => {
     expect(localStorage.getItem('env_budget_tour_completed')).toBe('true');
     expect(localStorage.getItem('env_budget_first_time_intro_done')).toBe('true');
     expect(localStorage.getItem('env_budget_last_reset_timestamp')).toBe(resetIso);
+  });
+
+  it('does not attempt cloud sync when no authenticated authorized user is configured', async () => {
+    syncMiddleware(mockStore)(next)(
+      ledgerActions.addTransaction({
+        categoryId: 'cat_groceries',
+        amount: 250000,
+        paymentMethod: 'cash',
+        date: '2026-09-15',
+      })
+    );
+
+    const result = await flushSyncNow();
+
+    expect(result).toEqual({
+      ok: false,
+      reason: 'signed_out',
+      message: 'Create or join a cloud household before syncing to cloud.',
+    });
+    expect(mockStore.dispatch).not.toHaveBeenCalledWith(ledgerActions.setSyncStatus('syncing'));
   });
 });

@@ -240,6 +240,92 @@ describe('Envelope Budget Logic Unit Tests', () => {
       expect(debt.pendingTransactions.length).toBe(1);
     });
 
+    it('folds append-only credit-card adjustments into the related original pending debt', () => {
+      const txs: Transaction[] = [
+        {
+          id: 't_cc1',
+          household_id: 'h1',
+          category_id: catGroceries,
+          amount: 400000,
+          date: '2026-09-01',
+          logged_by_user_id: 'u1',
+          payment_method: 'credit_card',
+          reconciliation_status: 'pending',
+          created_at: '2026-09-01T10:00:00Z',
+          updated_at: '2026-09-01T10:00:00Z',
+        },
+        {
+          id: 'tx_adj_1',
+          household_id: 'h1',
+          category_id: catGroceries,
+          amount: -150000,
+          date: '2026-09-02',
+          logged_by_user_id: 'u1',
+          payment_method: 'credit_card',
+          reconciliation_status: 'n/a',
+          created_at: '2026-09-02T10:00:00Z',
+          updated_at: '2026-09-02T10:00:00Z',
+          ledger_entry_type: 'adjustment',
+          related_transaction_id: 't_cc1',
+        },
+      ];
+
+      const debt = calculateCategoryPendingDebt(catGroceries, txs, []);
+
+      expect(debt.totalPendingDebt).toBe(250000);
+      expect(debt.pendingTransactions).toHaveLength(1);
+      expect(debt.pendingTransactions[0].id).toBe('t_cc1');
+      expect(debt.pendingTransactions[0].outstandingPaise).toBe(250000);
+    });
+
+    it('uses append-only reversal and replacement rows to move card debt between categories', () => {
+      const txs: Transaction[] = [
+        {
+          id: 't_original',
+          household_id: 'h1',
+          category_id: catGroceries,
+          amount: 400000,
+          date: '2026-09-01',
+          logged_by_user_id: 'u1',
+          payment_method: 'credit_card',
+          reconciliation_status: 'pending',
+          created_at: '2026-09-01T10:00:00Z',
+          updated_at: '2026-09-01T10:00:00Z',
+        },
+        {
+          id: 'tx_rev_1',
+          household_id: 'h1',
+          category_id: catGroceries,
+          amount: -400000,
+          date: '2026-09-02',
+          logged_by_user_id: 'u1',
+          payment_method: 'credit_card',
+          reconciliation_status: 'n/a',
+          created_at: '2026-09-02T10:00:00Z',
+          updated_at: '2026-09-02T10:00:00Z',
+          ledger_entry_type: 'reversal',
+          related_transaction_id: 't_original',
+        },
+        {
+          id: 'tx_repl_1',
+          household_id: 'h1',
+          category_id: catDining,
+          amount: 400000,
+          date: '2026-09-02',
+          logged_by_user_id: 'u1',
+          payment_method: 'credit_card',
+          reconciliation_status: 'pending',
+          created_at: '2026-09-02T10:00:00Z',
+          updated_at: '2026-09-02T10:00:00Z',
+          ledger_entry_type: 'replacement',
+          related_transaction_id: 't_original',
+        },
+      ];
+
+      expect(calculateCategoryPendingDebt(catGroceries, txs, []).totalPendingDebt).toBe(0);
+      expect(calculateCategoryPendingDebt(catDining, txs, []).totalPendingDebt).toBe(400000);
+    });
+
     it('executes FIFO settlement across multiple transactions in chronological order', () => {
       const txs: Transaction[] = [
         {

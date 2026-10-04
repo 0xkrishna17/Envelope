@@ -9,13 +9,14 @@ import {
   Reconciliation,
   ReconciliationLine,
   EnvelopeTransfer,
-  Invite,
   PushSubscriptionSetting,
   PaymentMethod,
+  ReconciliationStatus,
 } from '../types';
 import { INITIAL_HOUSEHOLD, INITIAL_MEMBERS, INITIAL_CATEGORIES } from '../data/initialData';
 import { executeFifoReconciliation, recomputeTransactionStatuses } from '../utils/budgetLogic';
 import { LedgerState, SyncState } from './types';
+import { DEFAULT_HOUSEHOLD_DOC_ID, normalizeHouseholdDocId } from '../sync/householdIdentity';
 
 const currentYearMonth = new Date().toISOString().slice(0, 7);
 
@@ -46,13 +47,12 @@ const initialState: LedgerState = {
   reconciliations: [],
   reconciliationLines: [],
   envelopeTransfers: [],
-  invites: [],
   selectedMonth: currentYearMonth,
   activeMemberId: 'usr_me',
   pushSettings: initialPushSettings,
   firstTimeIntroCompleted: false,
 
-  householdId: 'hh_family_ledger_main',
+  householdId: DEFAULT_HOUSEHOLD_DOC_ID,
   syncStatus: 'idle',
   lastCloudSync: null,
   permissionDenied: false,
@@ -66,10 +66,14 @@ export const ledgerSlice = createSlice({
   reducers: {
     // Household ID & Metadata
     setHouseholdId: (state, action: PayloadAction<string>) => {
-      state.householdId = action.payload;
+      const normalizedHouseholdId = normalizeHouseholdDocId(action.payload);
+      state.householdId = normalizedHouseholdId;
+      state.household.id = normalizedHouseholdId;
     },
     setHousehold: (state, action: PayloadAction<Household>) => {
-      state.household = sanitizeHousehold(action.payload);
+      const normalizedHouseholdId = normalizeHouseholdDocId(action.payload.id || state.householdId);
+      state.householdId = normalizedHouseholdId;
+      state.household = sanitizeHousehold({ ...action.payload, id: normalizedHouseholdId });
       if (action.payload.first_time_intro_completed) {
         state.firstTimeIntroCompleted = true;
       }
@@ -92,23 +96,28 @@ export const ledgerSlice = createSlice({
     setIsRemoteSync: (state, action: PayloadAction<boolean>) => {
       state.isRemoteSync = action.payload;
     },
+    resetLedgerState: () => initialState,
 
     // Cache / LocalStorage Hydration
     hydrateFromStorage: (state, action: PayloadAction<Partial<LedgerState>>) => {
       const data = action.payload;
-      if (data.household) state.household = sanitizeHousehold(data.household);
-      if (data.members) state.members = data.members;
-      if (data.categories) state.categories = data.categories;
+      const normalizedHouseholdId = normalizeHouseholdDocId(data.householdId || data.household?.id || state.householdId);
+      state.householdId = normalizedHouseholdId;
+      if (data.household) {
+        state.household = sanitizeHousehold({ ...data.household, id: normalizedHouseholdId });
+      } else {
+        state.household.id = normalizedHouseholdId;
+      }
+      if (data.members && data.members.length > 0) state.members = data.members;
+      if (data.categories && data.categories.length > 0) state.categories = data.categories;
       if (data.salaryEvents) state.salaryEvents = data.salaryEvents;
       if (data.allocations) state.allocations = data.allocations;
       if (data.transactions) state.transactions = data.transactions;
       if (data.reconciliations) state.reconciliations = data.reconciliations;
       if (data.reconciliationLines) state.reconciliationLines = data.reconciliationLines;
       if (data.envelopeTransfers) state.envelopeTransfers = data.envelopeTransfers;
-      if (data.invites) state.invites = data.invites;
       if (data.pushSettings) state.pushSettings = data.pushSettings;
       if (data.firstTimeIntroCompleted !== undefined) state.firstTimeIntroCompleted = data.firstTimeIntroCompleted;
-      if (data.householdId) state.householdId = data.householdId;
       if (data.lastResetAt) state.lastResetAt = data.lastResetAt;
     },
 
@@ -116,11 +125,24 @@ export const ledgerSlice = createSlice({
     remoteSnapshotReceived: (state, action: PayloadAction<any>) => {
       const data = action.payload;
       if (!data) return;
+      const normalizedHouseholdId = normalizeHouseholdDocId(data.__householdDocId || data.householdId || data.household?.id || state.householdId);
+      state.householdId = normalizedHouseholdId;
 
       if (data.household) {
-        state.household = sanitizeHousehold(data.household);
+        state.household = sanitizeHousehold({
+          ...data.household,
+          id: normalizedHouseholdId,
+          owner_uid: data.owner_uid || data.household.owner_uid,
+          owner_email: data.owner_email || data.household.owner_email,
+          allowed_emails: Array.isArray(data.allowed_emails)
+            ? data.allowed_emails
+            : data.household.allowed_emails,
+          created_by: data.created_by || data.household.created_by,
+        });
+      } else {
+        state.household.id = normalizedHouseholdId;
       }
-      if (Array.isArray(data.categories)) {
+      if (Array.isArray(data.categories) && data.categories.length > 0) {
         state.categories = data.categories;
       }
       if (Array.isArray(data.salaryEvents)) {
@@ -141,11 +163,8 @@ export const ledgerSlice = createSlice({
       if (Array.isArray(data.envelopeTransfers)) {
         state.envelopeTransfers = data.envelopeTransfers;
       }
-      if (Array.isArray(data.members)) {
+      if (Array.isArray(data.members) && data.members.length > 0) {
         state.members = data.members;
-      }
-      if (Array.isArray(data.invites)) {
-        state.invites = data.invites;
       }
       if (data.first_time_intro_completed) {
         state.firstTimeIntroCompleted = true;
@@ -204,32 +223,100 @@ export const ledgerSlice = createSlice({
       const tx = state.transactions.find(t => t.id === id);
       if (!tx) return;
 
-      const wasCreditCard = tx.payment_method === 'credit_card';
-      const isNowCreditCard = paymentMethod === 'credit_card';
-      let recStatus = tx.reconciliation_status;
+      const trimmedNote = note ? note.trim() : undefined;
+      const isSameFinancialBucket = tx.category_id === categoryId && tx.payment_method === paymentMethod;
+      const amountDelta = amount - tx.amount;
+      const metadataChanged = tx.date !== date || (tx.note || undefined) !== trimmedNote;
+      const financialBucketChanged = !isSameFinancialBucket;
+      const generatedSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const nextStatus: ReconciliationStatus = paymentMethod === 'credit_card' ? 'pending' : 'n/a';
 
-      if (!wasCreditCard && isNowCreditCard) {
-        recStatus = 'pending';
-      } else if (!isNowCreditCard) {
-        recStatus = 'n/a';
+      if (!financialBucketChanged) {
+        if (amountDelta === 0 && !metadataChanged) return;
+
+        const adjustmentNote = trimmedNote ||
+          (amountDelta === 0
+            ? `Audit note update for transaction ${tx.id}`
+            : `Amount adjustment for transaction ${tx.id}`);
+        const adjustment: Transaction = {
+          id: `tx_adj_${generatedSuffix}`,
+          household_id: state.household.id,
+          category_id: categoryId,
+          amount: amountDelta,
+          payment_method: paymentMethod,
+          note: adjustmentNote,
+          date,
+          logged_by_user_id: tx.logged_by_user_id,
+          reconciliation_status: 'n/a',
+          created_at: nowIso,
+          updated_at: nowIso,
+          ledger_entry_type: 'adjustment',
+          related_transaction_id: tx.id,
+        };
+        state.transactions.unshift(adjustment);
+        return;
       }
 
-      tx.category_id = categoryId;
-      tx.amount = amount;
-      tx.payment_method = paymentMethod;
-      tx.note = note ? note.trim() : undefined;
-      tx.date = date;
-      tx.reconciliation_status = recStatus;
-      tx.updated_at = nowIso;
+      const reversal: Transaction = {
+        id: `tx_rev_${generatedSuffix}`,
+        household_id: state.household.id,
+        category_id: tx.category_id,
+        amount: -tx.amount,
+        payment_method: tx.payment_method,
+        note: `Reversal for transaction ${tx.id}`,
+        date,
+        logged_by_user_id: tx.logged_by_user_id,
+        reconciliation_status: 'n/a',
+        created_at: nowIso,
+        updated_at: nowIso,
+        ledger_entry_type: 'reversal',
+        related_transaction_id: tx.id,
+      };
+
+      const replacement: Transaction = {
+        id: `tx_repl_${generatedSuffix}`,
+        household_id: state.household.id,
+        category_id: categoryId,
+        amount,
+        payment_method: paymentMethod,
+        note: trimmedNote || `Replacement for transaction ${tx.id}`,
+        date,
+        logged_by_user_id: tx.logged_by_user_id,
+        reconciliation_status: nextStatus,
+        created_at: nowIso,
+        updated_at: nowIso,
+        ledger_entry_type: 'replacement',
+        related_transaction_id: tx.id,
+      };
+
+      state.transactions.unshift(replacement, reversal);
     },
 
     deleteTransaction: (state, action: PayloadAction<string>) => {
       const nowIso = new Date().toISOString();
       const tx = state.transactions.find(t => t.id === action.payload);
-      if (tx) {
-        tx.deleted_at = nowIso;
-        tx.updated_at = nowIso;
-      }
+      if (!tx || tx.amount === 0) return;
+
+      const relatedTransactionId =
+        (tx.ledger_entry_type === 'adjustment' || tx.ledger_entry_type === 'reversal') && tx.related_transaction_id
+          ? tx.related_transaction_id
+          : tx.id;
+      const reversal: Transaction = {
+        id: `tx_del_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        household_id: state.household.id,
+        category_id: tx.category_id,
+        amount: -tx.amount,
+        payment_method: tx.payment_method,
+        note: `Delete reversal for transaction ${tx.id}`,
+        date: nowIso.split('T')[0],
+        logged_by_user_id: tx.logged_by_user_id,
+        reconciliation_status: 'n/a',
+        created_at: nowIso,
+        updated_at: nowIso,
+        ledger_entry_type: 'reversal',
+        related_transaction_id: relatedTransactionId,
+      };
+      state.transactions.unshift(reversal);
     },
 
     logCorrection: (
@@ -394,12 +481,29 @@ export const ledgerSlice = createSlice({
       const reconciliationId = action.payload;
       const nowIso = new Date().toISOString();
       const rec = state.reconciliations.find(r => r.id === reconciliationId);
-      if (rec) {
-        rec.deleted_at = nowIso;
-      }
-      state.reconciliationLines = state.reconciliationLines.filter(
-        l => l.reconciliation_id !== reconciliationId
-      );
+      if (!rec || rec.total_amount === 0) return;
+
+      const reversalId = `rec_rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const reversal: Reconciliation = {
+        id: reversalId,
+        household_id: state.household.id,
+        category_id: rec.category_id,
+        total_amount: -rec.total_amount,
+        date: nowIso.split('T')[0],
+        logged_by_user_id: rec.logged_by_user_id,
+        created_at: nowIso,
+      };
+      const reversalLines: ReconciliationLine[] = state.reconciliationLines
+        .filter(line => line.reconciliation_id === reconciliationId)
+        .map(line => ({
+          id: `recline_rev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          reconciliation_id: reversalId,
+          transaction_id: line.transaction_id,
+          amount_applied: -line.amount_applied,
+        }));
+
+      state.reconciliations.unshift(reversal);
+      state.reconciliationLines.push(...reversalLines);
 
       const statusMap = recomputeTransactionStatuses(state.transactions, state.reconciliationLines);
       for (const tx of state.transactions) {
@@ -468,8 +572,45 @@ export const ledgerSlice = createSlice({
 
     deleteEnvelopeTransfer: (state, action: PayloadAction<string>) => {
       const transferId = action.payload;
-      state.envelopeTransfers = state.envelopeTransfers.filter(t => t.id !== transferId);
-      state.allocations = state.allocations.filter(a => a.salary_event_id !== transferId);
+      const original = state.envelopeTransfers.find(t => t.id === transferId);
+      if (!original || original.amount === 0) return;
+
+      const nowIso = new Date().toISOString();
+      const reversalId = `tr_rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const reversalTransfer: EnvelopeTransfer = {
+        id: reversalId,
+        household_id: state.household.id,
+        from_category_id: original.to_category_id,
+        to_category_id: original.from_category_id,
+        amount: original.amount,
+        date: nowIso.split('T')[0],
+        logged_by_user_id: original.logged_by_user_id,
+        note: `Reversal for transfer ${original.id}`,
+        created_at: nowIso,
+      };
+      const allocToOriginalFrom: Allocation = {
+        id: `alloc_${reversalId}_to_original_from`,
+        salary_event_id: reversalId,
+        category_id: original.from_category_id,
+        planned_amount: original.amount,
+        transferred: true,
+        transferred_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+      const allocFromOriginalTo: Allocation = {
+        id: `alloc_${reversalId}_from_original_to`,
+        salary_event_id: reversalId,
+        category_id: original.to_category_id,
+        planned_amount: -original.amount,
+        transferred: true,
+        transferred_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
+      };
+
+      state.envelopeTransfers.unshift(reversalTransfer);
+      state.allocations.unshift(allocToOriginalFrom, allocFromOriginalTo);
     },
 
     // Direct Category Top-Up Funds
@@ -521,7 +662,25 @@ export const ledgerSlice = createSlice({
     },
 
     deleteCategoryFunds: (state, action: PayloadAction<string>) => {
-      state.allocations = state.allocations.filter(a => a.id !== action.payload);
+      const original = state.allocations.find(a => a.id === action.payload);
+      if (!original || original.planned_amount === 0) return;
+
+      const nowIso = new Date().toISOString();
+      const reversal: Allocation = {
+        id: `alloc_rev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        salary_event_id: `env_reversal_${Date.now()}`,
+        category_id: original.category_id,
+        planned_amount: -original.planned_amount,
+        transferred: original.transferred,
+        transferred_at: original.transferred ? nowIso : null,
+        created_at: nowIso,
+        updated_at: nowIso,
+        source: 'Reversal',
+        note: `Reversal for top-up ${original.id}`,
+        logged_by_user_id: original.logged_by_user_id || state.activeMemberId,
+        deposit_holding: original.deposit_holding,
+      };
+      state.allocations.unshift(reversal);
     },
 
     // Categories CRUD
@@ -611,25 +770,6 @@ export const ledgerSlice = createSlice({
 
     deleteMember: (state, action: PayloadAction<string>) => {
       state.members = state.members.filter(m => m.user_id !== action.payload);
-    },
-
-    // Invites
-    createInvite: (state, action: PayloadAction<{ code: string; createdBy: string }>) => {
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
-      const newInvite: Invite = {
-        id: `inv_${Date.now()}`,
-        household_id: state.household.id,
-        code: action.payload.code,
-        created_by: action.payload.createdBy,
-        created_at: now.toISOString(),
-        expires_at: expiresAt,
-      };
-      state.invites.unshift(newInvite);
-    },
-
-    revokeInvite: (state, action: PayloadAction<string>) => {
-      state.invites = state.invites.filter(i => i.id !== action.payload);
     },
 
     updatePushSettings: (

@@ -9,7 +9,6 @@ import {
   Sparkles,
   Trash2,
   Shield,
-  Copy,
   ExternalLink,
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
@@ -42,7 +41,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
     if (onBack) onBack();
     else if (onClose) onClose();
   };
-  const { members, activeMember, updateMemberProfile, setActiveMemberId, householdId } = useBudget();
+  const { members, activeMember, updateMemberProfile, setActiveMemberId } = useBudget();
   const { user } = useAuth();
 
   const [name, setName] = useState<string>('');
@@ -50,7 +49,6 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
   const [avatarColor, setAvatarColor] = useState<string>('#4E785E');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
-  const [copiedHh, setCopiedHh] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -130,12 +128,6 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
     }, 450);
   };
 
-  const handleCopyHousehold = () => {
-    navigator.clipboard.writeText(householdId);
-    setCopiedHh(true);
-    setTimeout(() => setCopiedHh(false), 2000);
-  };
-
   if (!isOpen) return null;
 
   return (
@@ -167,7 +159,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
           <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
             {isOnboarding
               ? 'Tell your household members what name and color to show when you log spending'
-              : 'Customize your avatar, display name, and household identification'}
+              : 'Customize your avatar and display name for shared activity'}
           </p>
         </div>
 
@@ -341,16 +333,8 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
           </div>
 
           {/* Household Context */}
-          <div className="pt-2 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60 flex items-center justify-between text-[11px] text-[#78716C] dark:text-[#A8A29E]">
-            <span className="truncate">Household ID: <strong className="font-mono">{householdId}</strong></span>
-            <button
-              type="button"
-              onClick={handleCopyHousehold}
-              className="flex items-center gap-1 text-[#486B88] font-medium hover:underline cursor-pointer"
-            >
-              {copiedHh ? <Check className="w-3 h-3 text-[#4E785E]" /> : <Copy className="w-3 h-3" />}
-              <span>{copiedHh ? 'Copied' : 'Copy'}</span>
-            </button>
+          <div className="pt-2 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60 text-[11px] text-[#78716C] dark:text-[#A8A29E]">
+            <span>Your profile is used to label transactions and shared household activity.</span>
           </div>
 
           {/* Action Buttons */}

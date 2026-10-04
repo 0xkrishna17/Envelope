@@ -91,7 +91,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
       alert('This transaction has already been partially or fully reconciled in a credit card payback. You cannot delete it directly. Please use "Log a correction" to offset the amount.');
       return;
     }
-    if (window.confirm('Delete this transaction? The category balance will recompute instantly.')) {
+    if (window.confirm('Reverse this transaction? The original TID stays in history and a new reversal entry will offset its amount.')) {
       deleteTransaction(transaction.id);
       handleBack();
     }
@@ -121,10 +121,10 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
-            Edit Entry
+            Adjust Entry
           </span>
           <span className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-            (Logged by {member?.name || 'Partner'})
+            TID {transaction.id} · logged by {member?.name || 'Partner'}
           </span>
         </div>
       </div>
@@ -313,7 +313,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                   className="flex-1 py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-xs flex items-center justify-center gap-1.5 shadow-xs"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Update Entry</span>
+                  <span>Save as New Adjustment</span>
                 </button>
               </div>
 

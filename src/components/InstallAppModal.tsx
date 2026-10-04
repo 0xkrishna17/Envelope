@@ -4,8 +4,12 @@ import { Smartphone, Download, Share2, Check, X, Chrome, Apple, Monitor, Externa
 interface InstallAppModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onNativeInstall?: () => void;
+  onNativeInstall?: () => Promise<void> | void;
   hasNativePrompt?: boolean;
+}
+
+function hasLegacyMicrosoftStream(value: Window): value is Window & { MSStream: unknown } {
+  return 'MSStream' in value;
 }
 
 export const InstallAppModal: React.FC<InstallAppModalProps> = ({
@@ -19,7 +23,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
   if (!isOpen) return null;
 
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !hasLegacyMicrosoftStream(window);
 
   const handleCopyLink = () => {
     let url = window.location.href;

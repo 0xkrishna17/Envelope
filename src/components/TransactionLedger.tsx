@@ -26,6 +26,7 @@ import {
   X,
   Plus,
   PlusCircle,
+  MinusCircle,
   ArrowLeftRight,
   Landmark,
   ArrowRight,
@@ -372,20 +373,31 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
         ) : (
           entries.map(entry => {
+            const isTransactionReversal =
+              'ledger_entry_type' in entry.raw && entry.raw.ledger_entry_type === 'reversal';
+            const isTopupReversal = entry.type === 'category_topup' && 'source' in entry.raw && entry.raw.source === 'Reversal';
+            const isReversalEntry =
+              isTransactionReversal ||
+              isTopupReversal ||
+              (entry.type === 'fund_move' && entry.id.includes('tr_rev_')) ||
+              (entry.type === 'reconcile' && entry.id.includes('rec_rev_'));
+            const rowClassName = isReversalEntry
+              ? 'flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#FFF6D8] dark:bg-[#332812] border border-[#E8C766] dark:border-[#6F5418] hover:border-[#B88A16] dark:hover:border-[#D4A52C] cursor-pointer transition-all shadow-xs group'
+              : 'flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] hover:border-[#1F1B16] dark:hover:border-[#EDE8E1] cursor-pointer transition-all shadow-xs group';
             return (
               <div
                 key={entry.id}
                 onClick={() => handleRowClick(entry)}
                 id={`ledger-row-${entry.id}`}
-                className="flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] hover:border-[#1F1B16] dark:hover:border-[#EDE8E1] cursor-pointer transition-all shadow-xs group"
+                className={rowClassName}
               >
                 {/* Left Side: Icon & Details */}
                 <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 pr-2">
                   {/* Visual Icon based on Entry Type */}
                   {entry.type === 'spend' && (
                     <div
-                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
-                      style={{ backgroundColor: entry.categoryColor || '#78716C' }}
+                      className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : ''}`}
+                      style={isReversalEntry ? undefined : { backgroundColor: entry.categoryColor || '#78716C' }}
                     >
                       {renderCategoryIcon(entry.categoryIcon || 'Wallet', 'w-4 h-4 sm:w-5 sm:h-5')}
                     </div>
@@ -398,20 +410,24 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   )}
 
                   {entry.type === 'reconcile' && (
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs bg-[#87341D]">
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : 'bg-[#87341D]'}`}>
                       <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
                     </div>
                   )}
 
                   {entry.type === 'fund_move' && (
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs bg-[#AF7832]">
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : 'bg-[#AF7832]'}`}>
                       <ArrowLeftRight className="w-4 h-4 sm:w-5 sm:h-5" />
                     </div>
                   )}
 
                   {entry.type === 'category_topup' && (
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs bg-[#2C523B]">
-                      <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : 'bg-[#2C523B]'}`}>
+                      {isReversalEntry ? (
+                        <MinusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                      ) : (
+                        <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                      )}
                     </div>
                   )}
 
@@ -423,22 +439,27 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                       </span>
 
                       {/* Type Badge */}
+                      {isReversalEntry && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F7E3A1] dark:bg-[#4A3810] text-[#7A4E15] dark:text-[#F2C94C] shrink-0">
+                          Reversal
+                        </span>
+                      )}
                       {entry.type === 'salary_credit' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#EBF2ED] dark:bg-[#1E3326] text-[#2C523B] dark:text-[#72B38A] shrink-0">
                           Salary Credit
                         </span>
                       )}
-                      {entry.type === 'category_topup' && (
+                      {!isReversalEntry && entry.type === 'category_topup' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#EBF2ED] dark:bg-[#1E3326] text-[#2C523B] dark:text-[#72B38A] shrink-0">
                           Top-Up
                         </span>
                       )}
-                      {entry.type === 'reconcile' && (
+                      {!isReversalEntry && entry.type === 'reconcile' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F9ECE8] dark:bg-[#381B13] text-[#87341D] dark:text-[#E89E8C] shrink-0">
                           CC Settle
                         </span>
                       )}
-                      {entry.type === 'fund_move' && (
+                      {!isReversalEntry && entry.type === 'fund_move' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F7EFE4] dark:bg-[#332515] text-[#7A4E15] dark:text-[#D4B384] shrink-0">
                           Fund Move
                         </span>
@@ -525,10 +546,10 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
                   {entry.type === 'category_topup' && (
                     <>
-                      <span className="font-amount font-bold text-sm text-[#2C523B] dark:text-[#72B38A]">
-                        +{formatPaise(entry.amountPaise)}
+                      <span className={`font-amount font-bold text-sm ${isReversalEntry ? 'text-[#7A4E15] dark:text-[#F2C94C]' : 'text-[#2C523B] dark:text-[#72B38A]'}`}>
+                        {entry.amountPaise >= 0 ? `+${formatPaise(entry.amountPaise)}` : formatPaise(entry.amountPaise)}
                       </span>
-                      <div className="text-[10px] text-[#2C523B] dark:text-[#72B38A] mt-0.5">
+                      <div className={`text-[10px] mt-0.5 ${isReversalEntry ? 'text-[#7A4E15] dark:text-[#F2C94C]' : 'text-[#2C523B] dark:text-[#72B38A]'}`}>
                         {entry.topupSource || 'Top-Up'}
                       </div>
                     </>
@@ -561,7 +582,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   {inspectEntry.type === 'salary_credit' && <Landmark className="w-4 h-4" />}
                   {inspectEntry.type === 'reconcile' && <CreditCard className="w-4 h-4" />}
                   {inspectEntry.type === 'fund_move' && <ArrowLeftRight className="w-4 h-4" />}
-                  {inspectEntry.type === 'category_topup' && <PlusCircle className="w-4 h-4" />}
+                  {inspectEntry.type === 'category_topup' && 'source' in inspectEntry.raw && inspectEntry.raw.source === 'Reversal' ? (
+                    <MinusCircle className="w-4 h-4" />
+                  ) : inspectEntry.type === 'category_topup' ? (
+                    <PlusCircle className="w-4 h-4" />
+                  ) : null}
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-[#1F1B16] dark:text-[#EDE8E1]">
@@ -777,8 +802,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   <div className="flex items-center gap-2 w-full justify-between">
                     <span className="text-xs font-semibold text-[#87341D] flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5" />
-                      Revert this entry?
+                      Add reversal entry?
                     </span>
+
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => setConfirmDeleteAction(false)}
@@ -791,7 +817,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                         id="confirm-revert-ledger-entry-btn"
                         className="px-3 py-1 text-xs rounded-lg bg-[#87341D] text-white font-medium hover:opacity-90"
                       >
-                        Yes, Revert
+                        Add Reversal
                       </button>
                     </div>
                   </div>
@@ -802,7 +828,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     className="text-xs text-[#87341D] dark:text-[#E89E8C] hover:underline flex items-center gap-1 font-medium"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Revert Entry</span>
+                    <span>Add Reversal Entry</span>
                   </button>
                 )
               ) : (

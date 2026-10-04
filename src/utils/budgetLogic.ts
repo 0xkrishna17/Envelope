@@ -67,12 +67,32 @@ export function calculateCategoryPendingDebt(
   totalPendingDebt: number;
   pendingTransactions: (Transaction & { outstandingPaise: number })[];
 } {
-  // Only non-deleted credit_card transactions that are pending or partially_reconciled
+  const relatedAdjustments = new Map<string, number>();
+  for (const tx of transactions) {
+    if (
+      tx.deleted_at ||
+      tx.payment_method !== 'credit_card' ||
+      !tx.related_transaction_id ||
+      (tx.ledger_entry_type !== 'adjustment' && tx.ledger_entry_type !== 'reversal')
+    ) {
+      continue;
+    }
+    relatedAdjustments.set(
+      tx.related_transaction_id,
+      (relatedAdjustments.get(tx.related_transaction_id) || 0) + tx.amount
+    );
+  }
+
+  // Only positive/root credit_card transactions that are pending or partially_reconciled are payoff candidates.
+  // Append-only adjustment and reversal rows are folded into their related original transaction above.
   const candidateTxs = transactions.filter(
     t =>
       t.category_id === categoryId &&
       !t.deleted_at &&
       t.payment_method === 'credit_card' &&
+      t.ledger_entry_type !== 'adjustment' &&
+      t.ledger_entry_type !== 'reversal' &&
+      t.amount > 0 &&
       (t.reconciliation_status === 'pending' || t.reconciliation_status === 'partially_reconciled')
   );
 
@@ -82,7 +102,8 @@ export function calculateCategoryPendingDebt(
   const pendingWithOutstanding = candidateTxs.map(t => {
     const appliedLines = lines.filter(l => l.transaction_id === t.id);
     const totalApplied = appliedLines.reduce((sum, l) => sum + l.amount_applied, 0);
-    const outstanding = Math.max(0, t.amount - totalApplied);
+    const adjustedAmount = t.amount + (relatedAdjustments.get(t.id) || 0);
+    const outstanding = Math.max(0, adjustedAmount - totalApplied);
     return {
       ...t,
       outstandingPaise: outstanding,
@@ -163,19 +184,40 @@ export function recomputeTransactionStatuses(
 ): Map<string, ReconciliationStatus> {
   const statusMap = new Map<string, ReconciliationStatus>();
 
+  const relatedAdjustments = new Map<string, number>();
   for (const tx of transactions) {
-    if (tx.payment_method !== 'credit_card') {
+    if (
+      tx.deleted_at ||
+      tx.payment_method !== 'credit_card' ||
+      !tx.related_transaction_id ||
+      (tx.ledger_entry_type !== 'adjustment' && tx.ledger_entry_type !== 'reversal')
+    ) {
+      continue;
+    }
+    relatedAdjustments.set(
+      tx.related_transaction_id,
+      (relatedAdjustments.get(tx.related_transaction_id) || 0) + tx.amount
+    );
+  }
+
+  for (const tx of transactions) {
+    if (
+      tx.payment_method !== 'credit_card' ||
+      tx.ledger_entry_type === 'adjustment' ||
+      tx.ledger_entry_type === 'reversal'
+    ) {
       statusMap.set(tx.id, 'n/a');
       continue;
     }
 
     const lines = reconciliationLines.filter(l => l.transaction_id === tx.id);
     const totalApplied = lines.reduce((sum, l) => sum + l.amount_applied, 0);
+    const adjustedAmount = Math.max(0, tx.amount + (relatedAdjustments.get(tx.id) || 0));
 
-    if (totalApplied <= 0) {
-      statusMap.set(tx.id, 'pending');
-    } else if (totalApplied >= tx.amount) {
+    if (adjustedAmount <= 0 || totalApplied >= adjustedAmount) {
       statusMap.set(tx.id, 'reconciled');
+    } else if (totalApplied <= 0) {
+      statusMap.set(tx.id, 'pending');
     } else {
       statusMap.set(tx.id, 'partially_reconciled');
     }

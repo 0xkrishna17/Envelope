@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
-import { usePwaInstall } from '../hooks/usePwaInstall';
 import { APP_VERSION } from '../App';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
 import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen, Download, Smartphone } from 'lucide-react';
@@ -13,6 +12,8 @@ interface SettingsTabProps {
   onOpenVoiceModal: () => void;
   onOpenCloudSyncModal: () => void;
   onOpenProfileModal: () => void;
+  onInstallPwa: () => Promise<void> | void;
+  isPwaInstalled: boolean;
   onOpenTour?: () => void;
 }
 
@@ -22,11 +23,12 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
   onOpenVoiceModal,
   onOpenCloudSyncModal,
   onOpenProfileModal,
+  onInstallPwa,
+  isPwaInstalled,
   onOpenTour,
 }) => {
-  const { user, householdId } = useAuth();
+  const { user } = useAuth();
   const [isResetZeroModalOpen, setIsResetZeroModalOpen] = useState(false);
-  const { isInstallable, isInstalled, triggerInstall } = usePwaInstall();
   const {
     household,
     members,
@@ -66,7 +68,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 </span>
               </h2>
               <span className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-                Ledger: <strong>{household.name}</strong> • ID: <code className="text-[11px] font-mono">{householdId}</code>
+                Shared ledger: <strong>{household.name}</strong>
               </span>
             </div>
           </div>
@@ -85,7 +87,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
               id="settings-invite-partner-btn"
               className="px-3 py-1.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 transition-opacity cursor-pointer"
             >
-              Invite Partner
+              Members
             </button>
           </div>
         </div>
@@ -129,7 +131,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
-      {/* Google Account Allowlist & Access Control */}
+      {/* Google Account Household Access Requests */}
       <HouseholdAccessManager />
 
       {/* Settings Grid */}
@@ -162,7 +164,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>
           <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1.5 pl-8">
             {user
-              ? `Signed in as ${user.displayName || user.email}. Household ID: ${householdId}. Both phones stay updated in real time.`
+              ? `Signed in as ${user.displayName || user.email}. Your authorized devices stay updated in real time.`
               : 'Sign in with Google to sync envelope balances across all phones and laptops.'}
           </p>
         </div>
@@ -298,24 +300,24 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
           <div>
             <h3 className="text-xs font-bold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-1.5">
               <span>Install Web App (PWA)</span>
-              {isInstalled && (
+              {isPwaInstalled && (
                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#4E785E]/15 text-[#4E785E]">
                   Installed
                 </span>
               )}
             </h3>
             <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5">
-              {isInstalled
+              {isPwaInstalled
                 ? 'App is installed on your device with offline support and home screen icon.'
                 : 'Add to your phone or desktop home screen for full-screen offline access.'}
             </p>
           </div>
         </div>
 
-        {!isInstalled && (
+        {!isPwaInstalled && (
           <button
             type="button"
-            onClick={triggerInstall}
+            onClick={onInstallPwa}
             id="install-pwa-btn"
             className="px-4 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity cursor-pointer shrink-0"
           >
@@ -355,7 +357,9 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
       <ResetDataWarningModal
         isOpen={isResetZeroModalOpen}
         onClose={() => setIsResetZeroModalOpen(false)}
-        onConfirm={() => resetLedgerToZero(false)}
+        onConfirm={async () => {
+          await resetLedgerToZero(false);
+        }}
         title="Reset All Ledger Data to ₹0?"
         description="This will permanently reset all envelope balances, transactions, and pending credit card paybacks to ₹0. Your envelope categories and partner setup remain untouched."
         confirmText="Yes, Reset to ₹0"

@@ -52,7 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
     setActiveMemberId,
     totalPendingPaybackPaise,
     cloudSyncStatus,
-    syncNow,
   } = useBudget();
 
   const rawHouseholdName = (household?.name || '').trim();
@@ -65,7 +64,6 @@ export const Header: React.FC<HeaderProps> = ({
       : rawHouseholdName;
 
   const handleOpenSync = () => {
-    syncNow().catch(() => {});
     setActiveTab('sync');
   };
 
@@ -224,7 +222,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={() => setActiveTab('invite')}
                 id="tab-invite-screen"
-                title="Invite Partner & Household Sharing Screen"
+                title="Members & Household Requests"
                 className={`px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap text-xs flex items-center gap-1.5 cursor-pointer ${
                   activeTab === 'invite'
                     ? 'bg-[#EFEAE1] dark:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] font-semibold'
@@ -232,7 +230,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <Users className="w-3.5 h-3.5 text-[#4E785E]" />
-                <span>Invite</span>
+                <span>Members</span>
               </button>
 
               <button

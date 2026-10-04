@@ -27,10 +27,10 @@ import { usePwaInstall } from './hooks/usePwaInstall';
 import { ApiLoadingProvider } from './context/ApiLoadingContext';
 import { formatPaise, paiseToWords } from './utils/currency';
 import { Transaction, ActiveTab } from './types';
-import { Plus, PlusCircle, Wallet, RefreshCw, Layers, ShieldCheck, ArrowRight, ArrowLeftRight, Settings, CheckCircle2, X, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, PlusCircle, Wallet, RefreshCw, Layers, ShieldCheck, ArrowRight, ArrowLeftRight, Settings, User, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // App version as instructed by user: "lets add version no of app and with each iteration lets keep increasing version no at bottom right in small text."
-export const APP_VERSION = 'v1.4.36';
+export const APP_VERSION = 'v1.4.41';
 
 function BudgetAppContent() {
   const {
@@ -43,28 +43,14 @@ function BudgetAppContent() {
     resetLedgerToZero,
     isFirstTimeIntroCompleted,
     isAccessAllowed,
+    cloudSetupStatus,
     syncNow,
   } = useBudget();
 
   const { isInstalled, showInstallGuide, triggerInstall, closeInstallGuide, hasNativePrompt } = usePwaInstall();
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
-  const { user, loading: authLoading, setHouseholdId } = useAuth();
-  const [partnerConnectedBanner, setPartnerConnectedBanner] = useState<string | null>(null);
-
-  // Auto-connect when partner opens a shared public link (?household=... or ?code=...)
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const sharedHh = params.get('household');
-      if (sharedHh) {
-        setHouseholdId(sharedHh);
-        setPartnerConnectedBanner(`Connected to household "${sharedHh}"! Both of your devices are now synchronized.`);
-      }
-    } catch (e) {
-      console.error('Error reading url params:', e);
-    }
-  }, []);
+  const { user, loading: authLoading } = useAuth();
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('envelopes');
@@ -183,7 +169,7 @@ function BudgetAppContent() {
     });
   };
 
-  if (!isAccessAllowed && !authLoading) {
+  if (cloudSetupStatus === 'access_denied' && !authLoading) {
     return (
       <div className="min-h-screen bg-[#FAF7F2] text-[#1F1B16] dark:bg-[#1A1714] dark:text-[#EDE8E1] flex flex-col antialiased selection:bg-[#E8C5BC] selection:text-[#87341D]">
         <Header
@@ -245,21 +231,6 @@ function BudgetAppContent() {
 
       {/* Main Body */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5">
-        {partnerConnectedBanner && (
-          <div className="mb-4 p-3 rounded-xl bg-[#4E785E]/10 border border-[#4E785E]/30 text-[#2C523B] dark:text-[#A1D1B1] text-xs flex items-center justify-between animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#4E785E] shrink-0" />
-              <span>{partnerConnectedBanner}</span>
-            </div>
-            <button
-              onClick={() => setPartnerConnectedBanner(null)}
-              className="p-1 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] rounded cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
         {/* Dedicated Screens (replacing modals with proper screens) */}
         {currentScreen ? (
           <div className="animate-in fade-in duration-150">
@@ -545,6 +516,8 @@ function BudgetAppContent() {
                   setCurrentScreen(null);
                 }}
                 onOpenProfileModal={() => setCurrentScreen({ type: 'profile', isOnboarding: false })}
+                onInstallPwa={triggerInstall}
+                isPwaInstalled={isInstalled}
                 onOpenTour={handleOpenTourSafely}
               />
             )}
@@ -556,14 +529,10 @@ function BudgetAppContent() {
                   setActiveTab('envelopes');
                   setCurrentScreen(null);
                 }}
-                onNavigateToInvite={() => {
-                  setActiveTab('invite');
-                  setCurrentScreen(null);
-                }}
               />
             )}
 
-            {/* Tab 6: Household Sharing & Invite Screen */}
+            {/* Tab 6: Members & Household Requests Screen */}
             {activeTab === 'invite' && (
               <HouseholdInviteScreen
                 onBack={() => {
@@ -595,7 +564,7 @@ function BudgetAppContent() {
 
       {/* Progressive Web App Install Modal */}
       <InstallAppModal
-        isOpen={isInstallModalOpen || showInstallGuide}
+        isOpen={!isInstalled && (isInstallModalOpen || showInstallGuide)}
         onClose={() => {
           setIsInstallModalOpen(false);
           closeInstallGuide();

@@ -10,8 +10,10 @@ export interface Household {
   id: string;
   name: string;
   created_by: string;
+  owner_uid?: string;
   owner_email?: string;
   allowed_emails?: string[];
+  member_uids?: string[];
   created_at: string;
   updated_at: string;
   first_time_intro_completed?: boolean;
@@ -31,15 +33,18 @@ export interface Membership {
   deleted_at?: string | null;
 }
 
-export interface Invite {
+export interface HouseholdInvitation {
   id: string;
   household_id: string;
-  code: string;
-  created_by: string;
+  household_name: string;
+  inviter_uid: string;
+  inviter_email: string;
+  invitee_email: string;
+  invitee_uid?: string;
+  status: 'pending' | 'accepted' | 'declined' | 'revoked';
   created_at: string;
-  expires_at: string;
-  used_by?: string;
-  used_at?: string;
+  updated_at: string;
+  responded_at?: string;
 }
 
 export interface Category {
@@ -81,6 +86,8 @@ export interface Allocation {
   deposit_holding?: 'secondary_account' | 'cash' | 'primary_account';
 }
 
+export type TransactionLedgerEntryType = 'original' | 'adjustment' | 'reversal' | 'replacement';
+
 export interface Transaction {
   id: string;
   household_id: string;
@@ -94,6 +101,8 @@ export interface Transaction {
   created_at: string;
   updated_at: string;
   deleted_at?: string | null;
+  ledger_entry_type?: TransactionLedgerEntryType;
+  related_transaction_id?: string;
 }
 
 export interface Reconciliation {

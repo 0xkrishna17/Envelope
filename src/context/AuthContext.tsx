@@ -8,121 +8,215 @@ import {
   User,
   db,
 } from '../lib/firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
+import { INITIAL_CATEGORIES, INITIAL_HOUSEHOLD, INITIAL_MEMBERS } from '../data/initialData';
+import {
+  createCloudHouseholdDocId,
+  LOCAL_HOUSEHOLD_ID,
+  normalizeCloudHouseholdDocId,
+} from '../sync/householdIdentity';
+import { householdPath, householdSubcollectionPath } from '../sync/firestorePaths';
+import { SYNC_SCHEMA_VERSION } from '../sync/firestoreMappers';
+import { Category, Household, Membership } from '../types';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  profileLoading: boolean;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   householdId: string;
-  setHouseholdId: (id: string) => void;
+  privateLedgerId: string | null;
+  setVerifiedHouseholdId: (id: string) => Promise<void>;
   syncStatus: 'synced' | 'syncing' | 'offline' | 'error';
   setSyncStatus: (status: 'synced' | 'syncing' | 'offline' | 'error') => void;
   authError: string | null;
 }
 
-const DEFAULT_HOUSEHOLD_ID = 'hh_family_ledger_main';
-const HOUSEHOLD_STORAGE_KEY = 'env_budget_active_household_id';
 export const AUTH_STATUS_KEY = 'env_budget_auth_status';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+interface UserProfileData {
+  activeLedgerId?: unknown;
+  privateLedgerId?: unknown;
+}
+
+function normalizeEmail(email: string | null): string {
+  return (email || '').trim().toLowerCase();
+}
+
+function withHouseholdId<T extends { household_id: string }>(item: T, householdId: string): T {
+  return { ...item, household_id: householdId };
+}
+
+async function createPrivateLedgerForUser(currentUser: User, userProfileExists: boolean): Promise<string> {
+  const ownerEmail = normalizeEmail(currentUser.email);
+  if (!ownerEmail) {
+    throw new Error('A Google account email is required to create a private ledger.');
+  }
+
+  const ledgerId = createCloudHouseholdDocId();
+  const nowIso = new Date().toISOString();
+  const household: Household = {
+    ...INITIAL_HOUSEHOLD,
+    id: ledgerId,
+    owner_uid: currentUser.uid,
+    owner_email: ownerEmail,
+    allowed_emails: [ownerEmail],
+    member_uids: [currentUser.uid],
+    created_by: currentUser.uid,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+  const members: Membership[] = INITIAL_MEMBERS.map(member => ({
+    ...withHouseholdId(member, ledgerId),
+    id: `mem_${currentUser.uid}`,
+    user_id: currentUser.uid,
+    name: currentUser.displayName || ownerEmail.split('@')[0] || 'You',
+    role: 'owner',
+    email: ownerEmail,
+    avatar_url: currentUser.photoURL || undefined,
+    joined_at: nowIso,
+  }));
+  const categories: Category[] = INITIAL_CATEGORIES.map(category => ({
+    ...withHouseholdId(category, ledgerId),
+    created_at: nowIso,
+    updated_at: nowIso,
+  }));
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, householdPath(ledgerId)), {
+    ...household,
+    updated_by_uid: currentUser.uid,
+    schema_version: SYNC_SCHEMA_VERSION,
+    sync_version: 1,
+    first_time_intro_completed: Boolean(household.first_time_intro_completed),
+    first_time_intro_completed_at: household.first_time_intro_completed_at || null,
+  });
+  for (const member of members) {
+    batch.set(doc(db, householdSubcollectionPath(ledgerId, 'members'), member.id), member);
+  }
+  for (const category of categories) {
+    batch.set(doc(db, householdSubcollectionPath(ledgerId, 'categories'), category.id), category);
+  }
+  batch.set(
+    doc(db, 'users', currentUser.uid),
+    {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      displayName: currentUser.displayName,
+      photoURL: currentUser.photoURL,
+      privateLedgerId: ledgerId,
+      activeLedgerId: ledgerId,
+      ...(userProfileExists ? {} : { createdAt: serverTimestamp() }),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  await batch.commit();
+
+  return ledgerId;
+}
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [profileLoading, setProfileLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
-  const [householdId, setHouseholdIdState] = useState<string>(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const urlHh = params.get('household');
-      if (urlHh && urlHh.trim()) {
-        const clean = urlHh.trim();
-        localStorage.setItem(HOUSEHOLD_STORAGE_KEY, clean);
-        return clean;
-      }
-    } catch {}
-    return localStorage.getItem(HOUSEHOLD_STORAGE_KEY) || DEFAULT_HOUSEHOLD_ID;
-  });
+  const [householdId, setHouseholdIdState] = useState<string>(LOCAL_HOUSEHOLD_ID);
+  const [privateLedgerId, setPrivateLedgerId] = useState<string | null>(null);
 
-  const householdIdRef = React.useRef(householdId);
-  useEffect(() => {
-    householdIdRef.current = householdId;
-  }, [householdId]);
-
-  const setHouseholdId = (id: string) => {
-    setHouseholdIdState(id);
-    localStorage.setItem(HOUSEHOLD_STORAGE_KEY, id);
-    if (user) {
-      // Save household mapping in user profile
-      const userRef = doc(db, 'users', user.uid);
-      setDoc(
-        userRef,
-        {
-          activeHouseholdId: id,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      ).catch(err => console.error('Error updating user household:', err));
+  const persistActiveLedgerId = async (currentUser: User, ledgerId: string): Promise<string> => {
+    const cloudLedgerId = normalizeCloudHouseholdDocId(ledgerId);
+    if (!cloudLedgerId) {
+      throw new Error('A generated cloud ledger id is required.');
     }
+
+    setHouseholdIdState(cloudLedgerId);
+    await setDoc(
+      doc(db, 'users', currentUser.uid),
+      {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        displayName: currentUser.displayName,
+        photoURL: currentUser.photoURL,
+        activeLedgerId: cloudLedgerId,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return cloudLedgerId;
+  };
+
+  const setVerifiedHouseholdId = async (id: string) => {
+    if (!user) throw new Error('Sign in before selecting a cloud ledger.');
+    await persistActiveLedgerId(user, id);
   };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, currentUser => {
       setUser(currentUser);
       setLoading(false);
+      setProfileLoading(Boolean(currentUser));
 
       if (currentUser) {
         try {
           localStorage.setItem(AUTH_STATUS_KEY, 'signed_in');
         } catch {}
 
-        // Asynchronously fetch/sync user profile in background without holding UI loading state
         (async () => {
           try {
-            let targetHouseholdId = householdIdRef.current;
-            try {
-              const params = new URLSearchParams(window.location.search);
-              const urlHh = params.get('household');
-              if (urlHh && urlHh.trim()) {
-                targetHouseholdId = urlHh.trim();
-              }
-            } catch {}
-
             const userRef = doc(db, 'users', currentUser.uid);
             const userSnap = await getDoc(userRef);
+            const profile = userSnap.exists() ? (userSnap.data() as UserProfileData) : null;
+            let privateId = normalizeCloudHouseholdDocId(String(profile?.privateLedgerId || ''));
+            let activeId = normalizeCloudHouseholdDocId(String(profile?.activeLedgerId || ''));
 
-            if (userSnap.exists()) {
-              const data = userSnap.data();
-              // Only adopt saved household if no explicit URL param was provided
-              const params = new URLSearchParams(window.location.search);
-              if (!params.get('household') && data?.activeHouseholdId) {
-                setHouseholdIdState(data.activeHouseholdId);
-                localStorage.setItem(HOUSEHOLD_STORAGE_KEY, data.activeHouseholdId);
-              } else if (params.get('household')) {
-                // Update user record with the new household from URL
-                await setDoc(userRef, { activeHouseholdId: targetHouseholdId }, { merge: true });
-              }
-            } else {
-              // First time login - save profile
-              await setDoc(userRef, {
-                uid: currentUser.uid,
-                email: currentUser.email,
-                displayName: currentUser.displayName,
-                photoURL: currentUser.photoURL,
-                activeHouseholdId: targetHouseholdId || DEFAULT_HOUSEHOLD_ID,
-                createdAt: serverTimestamp(),
-              });
+            const createdPrivateLedger = !privateId;
+            if (!privateId) {
+              privateId = await createPrivateLedgerForUser(currentUser, userSnap.exists());
             }
-          } catch (err: any) {
+            if (!activeId) {
+              activeId = privateId;
+            }
+
+            if (!createdPrivateLedger) {
+              await setDoc(
+                userRef,
+                {
+                  uid: currentUser.uid,
+                  email: currentUser.email,
+                  displayName: currentUser.displayName,
+                  photoURL: currentUser.photoURL,
+                  privateLedgerId: privateId,
+                  activeLedgerId: activeId,
+                  ...(userSnap.exists() ? {} : { createdAt: serverTimestamp() }),
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
+
+            setPrivateLedgerId(privateId);
+            setHouseholdIdState(activeId);
+          } catch (err: unknown) {
             console.error('Error fetching/creating user profile:', err);
+            setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
+            setPrivateLedgerId(null);
+            setAuthError(err instanceof Error ? err.message : 'Failed to prepare your private ledger.');
+          } finally {
+            setProfileLoading(false);
           }
         })();
       } else {
         try {
           localStorage.removeItem(AUTH_STATUS_KEY);
         } catch {}
+        setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
+        setPrivateLedgerId(null);
+        setProfileLoading(false);
       }
     });
 
@@ -133,10 +227,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthError(null);
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Google sign-in error:', err);
-      // Handle iframe / popup blocker
-      setAuthError(err.message || 'Failed to sign in with Google');
+      const message = err instanceof Error ? err.message : 'Failed to sign in with Google';
+      setAuthError(message);
       throw err;
     }
   };
@@ -145,10 +239,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthError(null);
     try {
       localStorage.removeItem(AUTH_STATUS_KEY);
+      setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
+      setPrivateLedgerId(null);
       await signOut(auth);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Logout error:', err);
-      setAuthError(err.message);
+      setAuthError(err instanceof Error ? err.message : 'Logout failed');
     }
   };
 
@@ -157,10 +253,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       value={{
         user,
         loading,
+        profileLoading,
         signInWithGoogle,
         logout,
         householdId,
-        setHouseholdId,
+        privateLedgerId,
+        setVerifiedHouseholdId,
         syncStatus,
         setSyncStatus,
         authError,
