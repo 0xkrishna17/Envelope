@@ -35,10 +35,10 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
     setIsSubmitting(true);
     try {
       const res = await addAllowedEmail(clean);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Could not add email.');
+      if (!res.ok) {
+        setErrorMsg(res.message || 'Could not add email.');
       } else {
-        setSuccessMsg(`Added ${clean} to allowlist.`);
+        setSuccessMsg(`Sent a household request to ${clean}.`);
         setNewEmail('');
         setTimeout(() => setSuccessMsg(null), 3500);
       }
@@ -52,15 +52,15 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
     setSuccessMsg(null);
     try {
       const res = await removeAllowedEmail(email);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Could not remove email.');
+      if (!res.ok) {
+        setErrorMsg(res.message || 'Could not remove email.');
       } else {
-        setSuccessMsg(`Removed ${email} from allowlist.`);
+        setSuccessMsg(`Removed ${email} from household access.`);
         setEmailToRemove(null);
         setTimeout(() => setSuccessMsg(null), 3000);
       }
-    } catch (e: any) {
-      setErrorMsg(e.message || 'Error removing email.');
+    } catch (e: unknown) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error removing email.');
     }
   };
 
@@ -73,10 +73,10 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
           </div>
           <div>
             <h3 className="text-xs font-bold text-[#1F1B16] dark:text-[#EDE8E1]">
-              Google Account Allowlist & Permissions
+              Google Household Access
             </h3>
             <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E]">
-              Only authorized Google accounts can view or edit this shared dashboard.
+              Owners send requests by Google email. Users join only after accepting.
             </p>
           </div>
         </div>
@@ -102,7 +102,7 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
       {/* Unified Authorized Accounts & Add Input Box */}
       <div className="pt-1">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] block mb-1.5">
-          Authorized Accounts & Access
+          Accepted Accounts & New Requests
         </span>
         <div className="rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-white/60 dark:bg-[#141210]/60 overflow-hidden divide-y divide-[#E8E3DA]/60 dark:divide-[#2D2823]/60">
           {allowedEmails.map(email => {
@@ -112,7 +112,7 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
             return (
               <div
                 key={email}
-                className="flex items-center justify-between p-2.5 px-3 hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714] transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 sm:p-2.5 sm:px-3 hover:bg-[#FAF7F2] dark:hover:bg-[#1A1714] transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <Mail className="w-3.5 h-3.5 text-[#78716C] shrink-0" />
@@ -137,14 +137,14 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
                   </div>
                 </div>
 
-                {!isHouseholdOwner && (
+                {isOwner && !isHouseholdOwner && (
                   <div>
                     {emailToRemove === email ? (
-                      <div className="flex items-center gap-1.5 animate-in fade-in">
+                      <div className="flex items-center gap-1.5 animate-in fade-in self-end sm:self-auto">
                         <button
                           type="button"
                           onClick={() => handleRemove(email)}
-                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-[#DC2626] text-white hover:bg-[#B91C1C] cursor-pointer"
+                          className="min-h-10 px-3 py-1.5 rounded text-xs sm:text-[10px] font-bold bg-[#DC2626] text-white hover:bg-[#B91C1C] cursor-pointer"
                         >
                           Revoke
                         </button>
@@ -161,7 +161,7 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
                         type="button"
                         onClick={() => setEmailToRemove(email)}
                         className="p-1 rounded text-[#78716C] hover:text-[#DC2626] dark:hover:text-[#F87171] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
-                        title={`Remove ${email} from allowlist`}
+                        title={`Remove ${email} from household access`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -173,26 +173,27 @@ export const HouseholdAccessManager: React.FC<HouseholdAccessManagerProps> = ({ 
           })}
 
           {/* Integrated Add Email Row inside the same unified box */}
-          <form onSubmit={handleAdd} className="p-2 sm:p-2.5 bg-[#FAF7F2]/60 dark:bg-[#1A1714]/60 flex items-center gap-2">
+          <form onSubmit={handleAdd} className="p-2 sm:p-2.5 bg-[#FAF7F2]/60 dark:bg-[#1A1714]/60 flex flex-col sm:flex-row sm:items-center gap-2">
             <input
               type="email"
               value={newEmail}
               onChange={e => setNewEmail(e.target.value)}
-              placeholder="Add partner Google email (e.g. spouse@gmail.com)"
-              className="flex-1 px-3 py-1.5 bg-white dark:bg-[#141210] rounded-lg text-xs text-[#1F1B16] dark:text-[#EDE8E1] border border-[#E8E3DA] dark:border-[#2D2823] outline-none placeholder-[#A8A29E]"
+              placeholder={isOwner ? 'Send request to Google email (e.g. spouse@gmail.com)' : 'Only the owner can send household requests'}
+              disabled={!isOwner}
+              className="w-full sm:flex-1 min-h-11 px-3 py-2 bg-white dark:bg-[#141210] rounded-lg text-sm sm:text-xs text-[#1F1B16] dark:text-[#EDE8E1] border border-[#E8E3DA] dark:border-[#2D2823] outline-none placeholder-[#A8A29E] disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <button
               type="submit"
-              disabled={!newEmail.trim() || isSubmitting}
-              className="px-3.5 py-1.5 rounded-lg bg-[#4E785E] text-white font-medium text-xs hover:bg-[#436851] transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40 shrink-0"
+              disabled={!isOwner || !newEmail.trim() || isSubmitting}
+              className="w-full sm:w-auto min-h-11 px-3.5 py-2 rounded-lg bg-[#4E785E] text-white font-medium text-sm sm:text-xs hover:bg-[#436851] transition-colors flex items-center justify-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>{isSubmitting ? 'Adding...' : 'Add Partner'}</span>
+              <span>{isSubmitting ? 'Sending...' : 'Send Request'}</span>
             </button>
           </form>
         </div>
         <p className="text-[10px] text-[#78716C] dark:text-[#A8A29E] leading-relaxed pt-1.5">
-          Tip: When your partner logs in with this Google email, they will instantly see the same envelopes, balances, and ledger in real time.
+          Tip: The invited person will see this request after signing in with the exact Google email. No household link or ledger ID is needed.
         </p>
       </div>
     </div>

@@ -112,10 +112,10 @@ export const EnvelopeDetailScreen: React.FC<CategoryDetailModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-category-detail-modal"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-sm sm:text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back to Envelopes</span>
+          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div
@@ -132,8 +132,11 @@ export const EnvelopeDetailScreen: React.FC<CategoryDetailModalProps> = ({
 
       <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden flex flex-col">
         {/* Category Identity Banner */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
-          <div className="flex items-center gap-2.5">
+        <div className="relative flex items-center justify-between px-5 pt-4 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+          <span className="absolute top-3 right-3 text-[9px] px-1.5 py-0.5 rounded-md bg-[#EFEAE1]/70 dark:bg-[#28221D]/70 border border-[#DCD5C9] dark:border-[#3D362F] font-mono text-[#78716C] dark:text-[#A8A29E]">
+            {category.is_unallocated ? 'Surplus' : 'Envelope'}
+          </span>
+          <div className="flex items-center gap-2.5 pr-20">
             <div
               className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-xs"
               style={{ backgroundColor: category.color }}
@@ -149,9 +152,6 @@ export const EnvelopeDetailScreen: React.FC<CategoryDetailModalProps> = ({
               </span>
             </div>
           </div>
-          <span className="text-xs px-2.5 py-1 rounded-lg bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] font-mono text-[#78716C] dark:text-[#A8A29E]">
-            {category.is_unallocated ? 'Built-in Surplus' : 'Envelope'}
-          </span>
         </div>
 
         {/* Balance Hero */}
@@ -169,7 +169,7 @@ export const EnvelopeDetailScreen: React.FC<CategoryDetailModalProps> = ({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row sm:flex-wrap gap-2">
             {pendingCardDebt > 0 && (
               <button
                 type="button"
@@ -177,45 +177,47 @@ export const EnvelopeDetailScreen: React.FC<CategoryDetailModalProps> = ({
                   handleBack();
                   onReconcileCategory(category.id);
                 }}
-                className="px-3 py-2 rounded-xl bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] border border-[#E8C5BC] dark:border-[#4D281E] text-xs font-semibold flex items-center gap-1.5"
+                className="w-full sm:w-auto min-h-11 sm:min-h-0 px-3 py-2.5 sm:py-2 rounded-xl bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] border border-[#E8C5BC] dark:border-[#4D281E] text-sm sm:text-xs font-semibold flex items-center justify-center gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>Pay Back {formatPaise(pendingCardDebt)}</span>
               </button>
             )}
 
-            {onMoveFunds && !category.is_unallocated && (
-              <button
-                type="button"
-                onClick={() => {
-                  handleBack();
-                  onMoveFunds(category.id);
-                }}
-                className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors ${
-                  isOverspent
-                    ? 'border-[#E8C5BC] bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] hover:bg-[#F3DDD7]'
-                    : 'border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1]'
-                }`}
-              >
-                <ArrowLeftRight className="w-3.5 h-3.5 text-[#486B88]" />
-                <span>{isOverspent ? 'Cover Deficit' : 'Move Funds'}</span>
-              </button>
-            )}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+              {onMoveFunds && !category.is_unallocated && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleBack();
+                    onMoveFunds(category.id);
+                  }}
+                  className={`min-h-11 sm:min-h-0 px-3 py-2.5 sm:py-2 rounded-xl border text-sm sm:text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors ${
+                    isOverspent
+                      ? 'border-[#E8C5BC] bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] hover:bg-[#F3DDD7]'
+                      : 'border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1]'
+                  }`}
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5 text-[#486B88]" />
+                  <span>{isOverspent ? 'Cover Deficit' : 'Move Funds'}</span>
+                </button>
+              )}
 
-            {onAddFunds && (
-              <button
-                type="button"
-                id="category-detail-add-funds-btn"
-                onClick={() => {
-                  handleBack();
-                  onAddFunds(category.id);
-                }}
-                className="px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
-              >
-                <PlusCircle className="w-3.5 h-3.5 text-[#2C523B]" />
-                <span>{category.is_unallocated ? 'Add Money to Envelope' : 'Add Money'}</span>
-              </button>
-            )}
+              {onAddFunds && (
+                <button
+                  type="button"
+                  id="category-detail-add-funds-btn"
+                  onClick={() => {
+                    handleBack();
+                    onAddFunds(category.id);
+                  }}
+                  className="min-h-11 sm:min-h-0 px-3 py-2.5 sm:py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] text-sm sm:text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs transition-colors"
+                >
+                  <PlusCircle className="w-3.5 h-3.5 text-[#2C523B]" />
+                  <span>{category.is_unallocated ? 'Add Money' : 'Add Money'}</span>
+                </button>
+              )}
+            </div>
 
             <button
               type="button"
@@ -223,7 +225,7 @@ export const EnvelopeDetailScreen: React.FC<CategoryDetailModalProps> = ({
                 handleBack();
                 onQuickSpend(category.id);
               }}
-              className="px-3 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold flex items-center gap-1.5 shadow-xs"
+              className="w-full sm:w-auto min-h-11 sm:min-h-0 px-3 py-2.5 sm:py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-sm sm:text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Log Expense</span>

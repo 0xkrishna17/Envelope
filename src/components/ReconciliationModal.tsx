@@ -5,6 +5,7 @@ import { renderCategoryIcon } from '../utils/categoryTheme';
 import {
   calculateCategoryPendingDebt,
 } from '../utils/budgetLogic';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { ArrowLeft, X, Check, ArrowRight, RefreshCw, AlertCircle, History, Trash2 } from 'lucide-react';
 
 interface ReconciliationModalProps {
@@ -37,7 +38,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
   // Selected category to pay back
   const [selectedCatId, setSelectedCatId] = useState<string>(preselectedCategoryId || '');
   const [payAmountRupees, setPayAmountRupees] = useState<string>('');
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => getTodayDateInputValue());
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [justSettled, setJustSettled] = useState<boolean>(false);
 
@@ -89,7 +90,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
     // Never editable above the amount owed (§4.4)
     const cappedPaise = Math.min(amountPaise, activeDebtItem.totalPendingDebt);
 
-    reconcileCategoryCardSpend(activeDebtItem.category.id, cappedPaise, date);
+    reconcileCategoryCardSpend(activeDebtItem.category.id, cappedPaise, clampDateInputToToday(date));
 
     setJustSettled(true);
     setTimeout(() => {
@@ -111,7 +112,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-reconcile-modal"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
           <span>Back</span>
@@ -304,7 +305,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
                         onChange={e => setPayAmountRupees(e.target.value)}
                         required
                         id="payback-amount-input"
-                        className="w-full pl-8 pr-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-base font-amount font-semibold text-[#1F1B16] dark:text-[#EDE8E1]"
+                        className="w-full min-h-11 pl-8 pr-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-base font-amount font-semibold text-[#1F1B16] dark:text-[#EDE8E1]"
                       />
                     </div>
                   </div>
@@ -316,7 +317,8 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
                     <input
                       type="date"
                       value={date}
-                      onChange={e => setDate(e.target.value)}
+                      max={getTodayDateInputValue()}
+                      onChange={e => setDate(clampDateInputToToday(e.target.value))}
                       required
                       id="payback-date-input"
                       className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1]"

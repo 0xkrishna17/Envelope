@@ -193,7 +193,7 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-move-funds-modal"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
           <span>Back</span>
@@ -250,7 +250,7 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
                       setErrorMsg('');
                     }}
                     id="move-from-category-select"
-                    className="w-full pl-3 pr-8 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] bg-[#FAF7F2] dark:bg-[#1A1714] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-[#486B88]"
+                    className="w-full min-h-11 pl-3 pr-8 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] bg-[#FAF7F2] dark:bg-[#1A1714] text-[#1F1B16] dark:text-[#EDE8E1] text-sm sm:text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-[#486B88]"
                   >
                     {availableCategories.map(cat => {
                       const bal = getBalance(cat.id);
@@ -307,7 +307,7 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
                       setErrorMsg('');
                     }}
                     id="move-to-category-select"
-                    className="w-full pl-3 pr-8 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] bg-[#FAF7F2] dark:bg-[#1A1714] text-[#1F1B16] dark:text-[#EDE8E1] text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-[#486B88]"
+                    className="w-full min-h-11 pl-3 pr-8 py-2.5 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] bg-[#FAF7F2] dark:bg-[#1A1714] text-[#1F1B16] dark:text-[#EDE8E1] text-sm sm:text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-[#486B88]"
                   >
                     {availableCategories.map(cat => {
                       const bal = getBalance(cat.id);

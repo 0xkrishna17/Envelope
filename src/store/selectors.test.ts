@@ -5,9 +5,11 @@ import {
   selectTotalPendingPaybackPaise,
   selectUnallocatedBalance,
   selectPendingTransfersList,
+  selectActiveMember,
 } from './selectors';
 import { RootState } from './index';
 import { INITIAL_HOUSEHOLD, INITIAL_MEMBERS, INITIAL_CATEGORIES } from '../data/initialData';
+import { DEFAULT_HOUSEHOLD_DOC_ID } from '../sync/householdIdentity';
 
 describe('Redux Selectors Unit Tests', () => {
   const createMockRootState = (overrides?: Partial<RootState['ledger']>): RootState => ({
@@ -21,7 +23,6 @@ describe('Redux Selectors Unit Tests', () => {
       reconciliations: [],
       reconciliationLines: [],
       envelopeTransfers: [],
-      invites: [],
       selectedMonth: '2026-09',
       activeMemberId: 'usr_me',
       pushSettings: {
@@ -33,7 +34,7 @@ describe('Redux Selectors Unit Tests', () => {
         created_at: '2026-09-01T00:00:00Z',
       },
       firstTimeIntroCompleted: true,
-      householdId: 'hh_main',
+      householdId: DEFAULT_HOUSEHOLD_DOC_ID,
       syncStatus: 'synced',
       lastCloudSync: null,
       permissionDenied: false,
@@ -82,7 +83,7 @@ describe('Redux Selectors Unit Tests', () => {
           // Groceries spend: ₹3,000 via Debit
           {
             id: 't1',
-            household_id: 'hh_main',
+            household_id: DEFAULT_HOUSEHOLD_DOC_ID,
             category_id: 'cat_groceries',
             amount: 300000,
             date: '2026-09-05',
@@ -95,7 +96,7 @@ describe('Redux Selectors Unit Tests', () => {
           // Dining spend: ₹2,000 via Credit Card (pending)
           {
             id: 't2',
-            household_id: 'hh_main',
+            household_id: DEFAULT_HOUSEHOLD_DOC_ID,
             category_id: 'cat_dining',
             amount: 200000,
             date: '2026-09-08',
@@ -151,7 +152,7 @@ describe('Redux Selectors Unit Tests', () => {
         transactions: [
           {
             id: 't1',
-            household_id: 'hh_main',
+            household_id: DEFAULT_HOUSEHOLD_DOC_ID,
             category_id: 'cat_groceries',
             amount: 400000,
             date: '2026-09-05',
@@ -201,7 +202,7 @@ describe('Redux Selectors Unit Tests', () => {
             id: 'a1',
             salary_event_id: 's1',
             category_id: 'cat_groceries',
-            planned_amount: 500000,
+            planned_amount: 1000000,
             transferred: true,
             created_at: '2026-09-01T10:00:00Z',
             updated_at: '2026-09-01T10:00:00Z',
@@ -210,8 +211,8 @@ describe('Redux Selectors Unit Tests', () => {
             id: 'a2',
             salary_event_id: 's1',
             category_id: 'cat_dining',
-            planned_amount: 300000,
-            transferred: false, // Pending!
+            planned_amount: 500000,
+            transferred: false,
             created_at: '2026-09-01T10:00:00Z',
             updated_at: '2026-09-01T10:00:00Z',
           },
@@ -222,6 +223,18 @@ describe('Redux Selectors Unit Tests', () => {
       expect(pending.length).toBe(1);
       expect(pending[0].id).toBe('a2');
       expect(pending[0].categoryName).toBe('Dining & Cafes');
+    });
+  });
+
+  describe('selectActiveMember', () => {
+    it('returns a fallback member when remote hydration temporarily has no members', () => {
+      const state = createMockRootState({ members: [] });
+
+      expect(selectActiveMember(state)).toMatchObject({
+        household_id: DEFAULT_HOUSEHOLD_DOC_ID,
+        user_id: 'usr_me',
+        name: 'You',
+      });
     });
   });
 });

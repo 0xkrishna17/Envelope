@@ -8,7 +8,6 @@ import {
   Reconciliation,
   ReconciliationLine,
   EnvelopeTransfer,
-  Invite,
   PushSubscriptionSetting,
 } from '../types';
 
@@ -24,7 +23,6 @@ export interface LedgerState {
   reconciliations: Reconciliation[];
   reconciliationLines: ReconciliationLine[];
   envelopeTransfers: EnvelopeTransfer[];
-  invites: Invite[];
   selectedMonth: string; // YYYY-MM
   activeMemberId: string;
   pushSettings: PushSubscriptionSetting;

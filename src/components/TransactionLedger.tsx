@@ -26,6 +26,7 @@ import {
   X,
   Plus,
   PlusCircle,
+  MinusCircle,
   ArrowLeftRight,
   Landmark,
   ArrowRight,
@@ -171,7 +172,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-1 sm:px-4 py-2 sm:py-6 flex flex-col gap-3 sm:gap-6">
+    <div className="max-w-4xl mx-auto px-1 sm:px-4 py-2 sm:py-6 pb-28 sm:pb-20 flex flex-col gap-3 sm:gap-6">
       {/* Top Banner (Action buttons removed from top per user request; available in floating nav / quick spend) */}
       <div className="flex flex-col gap-1 px-1 sm:px-0">
         <h2 className="text-lg sm:text-xl font-bold tracking-tight text-[#1F1B16] dark:text-[#EDE8E1]">
@@ -193,7 +194,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             id="ledger-search-input"
-            className="w-full pl-8 pr-7 py-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs placeholder:text-[#78716C] focus:outline-none focus:border-[#1F1B16] dark:focus:border-[#EDE8E1]"
+            className="w-full min-h-11 sm:min-h-10 pl-8 pr-7 py-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs placeholder:text-[#78716C] focus:outline-none focus:border-[#1F1B16] dark:focus:border-[#EDE8E1]"
           />
           {searchQuery && (
             <button
@@ -206,17 +207,17 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           )}
         </div>
 
-        {/* Row 2: Filter Controls (Dropdowns + Timeframe + More Filters) */}
+        {/* Row 2: Filter Controls (Timeframe + More Filters; type/envelope live in More on mobile) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          {/* Entry Type & Envelope Dropdowns */}
-          <div className="grid grid-cols-2 gap-2 flex-1">
+          {/* Entry Type & Envelope Dropdowns stay visible on wider screens */}
+          <div className="hidden sm:grid sm:grid-cols-2 gap-2 flex-1">
             {/* Entry Type Dropdown */}
             <div>
               <select
                 value={selectedTypeFilter}
                 onChange={e => setSelectedTypeFilter(e.target.value as any)}
                 id="ledger-filter-type"
-                className={`w-full py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border rounded-xl text-xs font-medium transition-colors focus:outline-none ${
+                className={`w-full min-h-10 py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border rounded-xl text-xs font-medium transition-colors focus:outline-none ${
                   selectedTypeFilter !== 'all'
                     ? 'border-[#1F1B16] dark:border-[#EDE8E1] text-[#1F1B16] dark:text-[#EDE8E1]'
                     : 'border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] dark:text-[#A8A29E]'
@@ -237,7 +238,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 value={selectedCategoryFilter}
                 onChange={e => setSelectedCategoryFilter(e.target.value)}
                 id="ledger-filter-category"
-                className={`w-full py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border rounded-xl text-xs font-medium transition-colors focus:outline-none ${
+                className={`w-full min-h-10 py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border rounded-xl text-xs font-medium transition-colors focus:outline-none ${
                   selectedCategoryFilter !== 'all'
                     ? 'border-[#1F1B16] dark:border-[#EDE8E1] text-[#1F1B16] dark:text-[#EDE8E1]'
                     : 'border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] dark:text-[#A8A29E]'
@@ -256,11 +257,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           {/* Timeframe Selector & More Filters Toggle */}
           <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
             {/* Timeframe Selector */}
-            <div className="flex items-center gap-0.5 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 p-0.5 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs">
+            <div className="flex items-center gap-0.5 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 p-0.5 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs">
               <button
                 onClick={() => setDateRangeFilter('current_month')}
                 id="ledger-timeframe-month"
-                className={`px-2.5 py-1 rounded-lg transition-colors text-[11px] font-medium ${
+                className={`min-h-10 px-2.5 py-2 sm:py-1 rounded-lg transition-colors text-sm sm:text-[11px] font-medium ${
                   dateRangeFilter === 'current_month'
                     ? 'bg-white dark:bg-[#1A1714] text-[#1F1B16] dark:text-[#EDE8E1] shadow-xs'
                     : 'text-[#78716C] hover:text-[#1F1B16]'
@@ -271,7 +272,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
               <button
                 onClick={() => setDateRangeFilter('all')}
                 id="ledger-timeframe-all"
-                className={`px-2.5 py-1 rounded-lg transition-colors text-[11px] font-medium ${
+                className={`min-h-10 px-2.5 py-2 sm:py-1 rounded-lg transition-colors text-sm sm:text-[11px] font-medium ${
                   dateRangeFilter === 'all'
                     ? 'bg-white dark:bg-[#1A1714] text-[#1F1B16] dark:text-[#EDE8E1] shadow-xs'
                     : 'text-[#78716C] hover:text-[#1F1B16]'
@@ -285,25 +286,71 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
             <button
               onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
               id="ledger-toggle-advanced-filters"
-              title="More filters (Logged By, Payment Method)"
-              className={`px-2.5 py-1.5 rounded-xl border text-xs font-medium flex items-center justify-center gap-1 transition-all shrink-0 ${
-                showAdvancedFilters || selectedMemberFilter !== 'all' || selectedMethodFilter !== 'all'
+              title="More filters (Type, Envelope, Logged By, Payment Method)"
+              className={`min-h-10 px-2.5 py-2 sm:py-1.5 rounded-xl border text-sm sm:text-xs font-medium flex items-center justify-center gap-1 transition-all shrink-0 ${
+                showAdvancedFilters || selectedTypeFilter !== 'all' || selectedCategoryFilter !== 'all' || selectedMemberFilter !== 'all' || selectedMethodFilter !== 'all'
                   ? 'bg-[#EFEAE1] dark:bg-[#28221D] border-[#1F1B16] dark:border-[#EDE8E1] text-[#1F1B16] dark:text-[#EDE8E1]'
                   : 'border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:text-[#1F1B16]'
               }`}
             >
               <Filter className="w-3.5 h-3.5" />
               <span>More</span>
-              {(selectedMemberFilter !== 'all' || selectedMethodFilter !== 'all') && (
+              {(selectedTypeFilter !== 'all' || selectedCategoryFilter !== 'all' || selectedMemberFilter !== 'all' || selectedMethodFilter !== 'all') && (
                 <span className="w-1.5 h-1.5 rounded-full bg-[#B85D43]" />
               )}
             </button>
           </div>
         </div>
 
-        {/* Collapsible Advanced Filters: Member & Payment Method */}
+        {/* Collapsible Advanced Filters: Type, Envelope, Member & Payment Method */}
         {showAdvancedFilters && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-[#E8E3DA]/80 dark:border-[#2D2823]/80">
+            <div className="sm:hidden">
+              <label className="block text-[10px] text-[#78716C] font-semibold uppercase mb-1">
+                Entry Type
+              </label>
+              <select
+                value={selectedTypeFilter}
+                onChange={e => setSelectedTypeFilter(e.target.value as any)}
+                id="ledger-filter-type-mobile"
+                className={`w-full min-h-11 py-2 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border rounded-xl text-sm font-medium transition-colors focus:outline-none ${
+                  selectedTypeFilter !== 'all'
+                    ? 'border-[#1F1B16] dark:border-[#EDE8E1] text-[#1F1B16] dark:text-[#EDE8E1]'
+                    : 'border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] dark:text-[#A8A29E]'
+                }`}
+              >
+                <option value="all">All Types ({stats.totalCount})</option>
+                <option value="spend">Spends ({stats.spendCount})</option>
+                <option value="salary_credit">Salary In ({stats.salaryCount})</option>
+                <option value="category_topup">Top-Ups ({stats.topupCount})</option>
+                <option value="reconcile">CC Settle ({stats.reconcileCount})</option>
+                <option value="fund_move">Fund Moves ({stats.fundMoveCount})</option>
+              </select>
+            </div>
+
+            <div className="sm:hidden">
+              <label className="block text-[10px] text-[#78716C] font-semibold uppercase mb-1">
+                Envelope
+              </label>
+              <select
+                value={selectedCategoryFilter}
+                onChange={e => setSelectedCategoryFilter(e.target.value)}
+                id="ledger-filter-category-mobile"
+                className={`w-full min-h-11 py-2 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border rounded-xl text-sm font-medium transition-colors focus:outline-none ${
+                  selectedCategoryFilter !== 'all'
+                    ? 'border-[#1F1B16] dark:border-[#EDE8E1] text-[#1F1B16] dark:text-[#EDE8E1]'
+                    : 'border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] dark:text-[#A8A29E]'
+                }`}
+              >
+                <option value="all">All Envelopes</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-[10px] text-[#78716C] font-semibold uppercase mb-1">
                 Logged By / Earner
@@ -312,7 +359,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 value={selectedMemberFilter}
                 onChange={e => setSelectedMemberFilter(e.target.value)}
                 id="ledger-filter-member"
-                className="w-full py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs font-medium"
+                className="w-full min-h-11 sm:min-h-10 py-2 sm:py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs font-medium"
               >
                 <option value="all">Everyone</option>
                 {members.map(m => (
@@ -331,7 +378,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 value={selectedMethodFilter}
                 onChange={e => setSelectedMethodFilter(e.target.value)}
                 id="ledger-filter-payment-method"
-                className="w-full py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs font-medium"
+                className="w-full min-h-11 sm:min-h-10 py-2 sm:py-1.5 px-2 bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs font-medium"
               >
                 <option value="all">All Payment Methods</option>
                 <option value="secondary_account_upi">Spend Account (UPI)</option>
@@ -372,20 +419,31 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
           </div>
         ) : (
           entries.map(entry => {
+            const isTransactionReversal =
+              'ledger_entry_type' in entry.raw && entry.raw.ledger_entry_type === 'reversal';
+            const isTopupReversal = entry.type === 'category_topup' && 'source' in entry.raw && entry.raw.source === 'Reversal';
+            const isReversalEntry =
+              isTransactionReversal ||
+              isTopupReversal ||
+              (entry.type === 'fund_move' && entry.id.includes('tr_rev_')) ||
+              (entry.type === 'reconcile' && entry.id.includes('rec_rev_'));
+            const rowClassName = isReversalEntry
+              ? 'flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#FFF6D8] dark:bg-[#332812] border border-[#E8C766] dark:border-[#6F5418] hover:border-[#B88A16] dark:hover:border-[#D4A52C] cursor-pointer transition-all shadow-xs group'
+              : 'flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] hover:border-[#1F1B16] dark:hover:border-[#EDE8E1] cursor-pointer transition-all shadow-xs group';
             return (
               <div
                 key={entry.id}
                 onClick={() => handleRowClick(entry)}
                 id={`ledger-row-${entry.id}`}
-                className="flex items-center justify-between p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] hover:border-[#1F1B16] dark:hover:border-[#EDE8E1] cursor-pointer transition-all shadow-xs group"
+                className={rowClassName}
               >
                 {/* Left Side: Icon & Details */}
                 <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 pr-2">
                   {/* Visual Icon based on Entry Type */}
                   {entry.type === 'spend' && (
                     <div
-                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
-                      style={{ backgroundColor: entry.categoryColor || '#78716C' }}
+                      className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : ''}`}
+                      style={isReversalEntry ? undefined : { backgroundColor: entry.categoryColor || '#78716C' }}
                     >
                       {renderCategoryIcon(entry.categoryIcon || 'Wallet', 'w-4 h-4 sm:w-5 sm:h-5')}
                     </div>
@@ -398,20 +456,24 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   )}
 
                   {entry.type === 'reconcile' && (
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs bg-[#87341D]">
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : 'bg-[#87341D]'}`}>
                       <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
                     </div>
                   )}
 
                   {entry.type === 'fund_move' && (
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs bg-[#AF7832]">
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : 'bg-[#AF7832]'}`}>
                       <ArrowLeftRight className="w-4 h-4 sm:w-5 sm:h-5" />
                     </div>
                   )}
 
                   {entry.type === 'category_topup' && (
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs bg-[#2C523B]">
-                      <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs ${isReversalEntry ? 'bg-[#B88A16]' : 'bg-[#2C523B]'}`}>
+                      {isReversalEntry ? (
+                        <MinusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                      ) : (
+                        <PlusCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                      )}
                     </div>
                   )}
 
@@ -423,22 +485,27 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                       </span>
 
                       {/* Type Badge */}
+                      {isReversalEntry && (
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F7E3A1] dark:bg-[#4A3810] text-[#7A4E15] dark:text-[#F2C94C] shrink-0">
+                          Reversal
+                        </span>
+                      )}
                       {entry.type === 'salary_credit' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#EBF2ED] dark:bg-[#1E3326] text-[#2C523B] dark:text-[#72B38A] shrink-0">
                           Salary Credit
                         </span>
                       )}
-                      {entry.type === 'category_topup' && (
+                      {!isReversalEntry && entry.type === 'category_topup' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#EBF2ED] dark:bg-[#1E3326] text-[#2C523B] dark:text-[#72B38A] shrink-0">
                           Top-Up
                         </span>
                       )}
-                      {entry.type === 'reconcile' && (
+                      {!isReversalEntry && entry.type === 'reconcile' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F9ECE8] dark:bg-[#381B13] text-[#87341D] dark:text-[#E89E8C] shrink-0">
                           CC Settle
                         </span>
                       )}
-                      {entry.type === 'fund_move' && (
+                      {!isReversalEntry && entry.type === 'fund_move' && (
                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-[#F7EFE4] dark:bg-[#332515] text-[#7A4E15] dark:text-[#D4B384] shrink-0">
                           Fund Move
                         </span>
@@ -525,10 +592,10 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
                   {entry.type === 'category_topup' && (
                     <>
-                      <span className="font-amount font-bold text-sm text-[#2C523B] dark:text-[#72B38A]">
-                        +{formatPaise(entry.amountPaise)}
+                      <span className={`font-amount font-bold text-sm ${isReversalEntry ? 'text-[#7A4E15] dark:text-[#F2C94C]' : 'text-[#2C523B] dark:text-[#72B38A]'}`}>
+                        {entry.amountPaise >= 0 ? `+${formatPaise(entry.amountPaise)}` : formatPaise(entry.amountPaise)}
                       </span>
-                      <div className="text-[10px] text-[#2C523B] dark:text-[#72B38A] mt-0.5">
+                      <div className={`text-[10px] mt-0.5 ${isReversalEntry ? 'text-[#7A4E15] dark:text-[#F2C94C]' : 'text-[#2C523B] dark:text-[#72B38A]'}`}>
                         {entry.topupSource || 'Top-Up'}
                       </div>
                     </>
@@ -561,7 +628,11 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   {inspectEntry.type === 'salary_credit' && <Landmark className="w-4 h-4" />}
                   {inspectEntry.type === 'reconcile' && <CreditCard className="w-4 h-4" />}
                   {inspectEntry.type === 'fund_move' && <ArrowLeftRight className="w-4 h-4" />}
-                  {inspectEntry.type === 'category_topup' && <PlusCircle className="w-4 h-4" />}
+                  {inspectEntry.type === 'category_topup' && 'source' in inspectEntry.raw && inspectEntry.raw.source === 'Reversal' ? (
+                    <MinusCircle className="w-4 h-4" />
+                  ) : inspectEntry.type === 'category_topup' ? (
+                    <PlusCircle className="w-4 h-4" />
+                  ) : null}
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-[#1F1B16] dark:text-[#EDE8E1]">
@@ -777,8 +848,9 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                   <div className="flex items-center gap-2 w-full justify-between">
                     <span className="text-xs font-semibold text-[#87341D] flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5" />
-                      Revert this entry?
+                      Add reversal entry?
                     </span>
+
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => setConfirmDeleteAction(false)}
@@ -791,7 +863,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                         id="confirm-revert-ledger-entry-btn"
                         className="px-3 py-1 text-xs rounded-lg bg-[#87341D] text-white font-medium hover:opacity-90"
                       >
-                        Yes, Revert
+                        Add Reversal
                       </button>
                     </div>
                   </div>
@@ -802,7 +874,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     className="text-xs text-[#87341D] dark:text-[#E89E8C] hover:underline flex items-center gap-1 font-medium"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Revert Entry</span>
+                    <span>Add Reversal Entry</span>
                   </button>
                 )
               ) : (

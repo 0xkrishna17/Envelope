@@ -1,7 +1,5 @@
-import React, { createContext, useContext, useEffect, useMemo, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, ReactNode, useCallback, useState } from 'react';
 import { Provider } from 'react-redux';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 import { useApiLoading } from './ApiLoadingContext';
 import { store, useAppDispatch, useAppSelector } from '../store';
@@ -18,7 +16,6 @@ import {
   selectReconciliations,
   selectReconciliationLines,
   selectEnvelopeTransfers,
-  selectInvites,
   selectSelectedMonth,
   selectCategoryBalances,
   selectTotalAvailablePaise,
@@ -32,9 +29,9 @@ import {
   selectPermissionDenied,
 } from '../store/selectors';
 import {
-  STORAGE_KEYS,
   subscribeToFirestoreHousehold,
   flushSyncNow,
+  configureSyncAuth,
 } from '../store/syncMiddleware';
 import {
   Household,
@@ -46,10 +43,30 @@ import {
   Reconciliation,
   ReconciliationLine,
   EnvelopeTransfer,
-  Invite,
+  HouseholdInvitation,
   PushSubscriptionSetting,
   CategoryBalanceInfo,
 } from '../types';
+import { SyncResult } from '../sync/types';
+import { isValidCloudHouseholdId } from '../sync/householdIdentity';
+import { loadHouseholdOnce } from '../sync/syncEngine';
+import {
+  acceptHouseholdInvitation,
+  createHouseholdInvitation,
+  declineHouseholdInvitation,
+  leaveHousehold,
+  listOwnedHouseholdInvitations,
+  listPendingHouseholdInvitations,
+  revokeHouseholdInvitation,
+  revokeHouseholdMemberAccess,
+} from '../sync/householdInvitations';
+import {
+  persistLocalLedgerCache,
+  persistUserHouseholdLedgerCache,
+  readLocalLedgerCache,
+  readUserHouseholdLedgerCache,
+} from '../sync/localCache';
+import { useSyncRecovery } from '../sync/useSyncRecovery';
 
 export interface BudgetContextType {
   household: Household;
@@ -62,7 +79,6 @@ export interface BudgetContextType {
   transactions: Transaction[];
   reconciliations: Reconciliation[];
   reconciliationLines: ReconciliationLine[];
-  invites: Invite[];
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
   categoryBalances: CategoryBalanceInfo[];
@@ -134,32 +150,46 @@ export interface BudgetContextType {
     updates: { name?: string; avatar_url?: string; avatar_color?: string }
   ) => void;
   deleteMember: (userId: string) => { success: boolean; error?: string };
-  createInvite: () => Invite;
-  revokeInvite: (inviteId: string) => void;
   updatePushSettings: (time: string, enabled: boolean) => void;
-  resetLedgerToZero: (isFirstTimeIntro?: boolean) => Promise<void>;
+  resetLedgerToZero: (isFirstTimeIntro?: boolean) => Promise<SyncResult>;
   isFirstTimeIntroCompleted: boolean;
 
   // Cloud & Cross-Device Synchronization
   householdId: string;
   cloudSyncStatus: 'synced' | 'syncing' | 'offline' | 'error';
+  cloudSetupStatus: 'local_only' | 'verifying' | 'verified' | 'access_denied';
   lastCloudSync: string | null;
-  syncNow: () => Promise<void>;
+  pendingInvitations: HouseholdInvitation[];
+  sentInvitations: HouseholdInvitation[];
+  refreshHouseholdInvitations: () => Promise<void>;
+  syncNow: () => Promise<SyncResult>;
 
-  // Google Account Allowlist & Access Control
+  // Google Account Household Access
   isAccessAllowed: boolean;
   authLoading: boolean;
   accessBlockedReason: 'none' | 'auth_required' | 'not_in_allowlist';
   isOwner: boolean;
-  addAllowedEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
-  removeAllowedEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
+  addAllowedEmail: (email: string) => Promise<SyncResult>;
+  removeAllowedEmail: (email: string) => Promise<SyncResult>;
+  acceptInvitation: (invitationId: string) => Promise<SyncResult>;
+  declineInvitation: (invitationId: string) => Promise<SyncResult>;
+  revokeInvitation: (invitationId: string) => Promise<SyncResult>;
+  leaveCurrentHousehold: () => Promise<SyncResult>;
 }
 
 const BudgetContext = createContext<BudgetContextType | undefined>(undefined);
 
 const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) => {
   const dispatch = useAppDispatch();
-  const { user, loading: authLoading, householdId: authHouseholdId, setSyncStatus: setAuthSyncStatus } = useAuth();
+  const {
+    user,
+    loading: authLoading,
+    profileLoading,
+    householdId: authHouseholdId,
+    privateLedgerId,
+    setVerifiedHouseholdId,
+    setSyncStatus: setAuthSyncStatus,
+  } = useAuth();
   const { startApiCall } = useApiLoading();
 
   // Redux Selectors
@@ -174,7 +204,6 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
   const reconciliations = useAppSelector(selectReconciliations);
   const reconciliationLines = useAppSelector(selectReconciliationLines);
   const envelopeTransfers = useAppSelector(selectEnvelopeTransfers);
-  const invites = useAppSelector(selectInvites);
   const selectedMonth = useAppSelector(selectSelectedMonth);
   const categoryBalances = useAppSelector(selectCategoryBalances);
   const totalAvailablePaise = useAppSelector(selectTotalAvailablePaise);
@@ -186,13 +215,86 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
   const syncStatus = useAppSelector(selectSyncStatus);
   const lastCloudSync = useAppSelector(selectLastCloudSync);
   const permissionDenied = useAppSelector(selectPermissionDenied);
+  const [pendingInvitations, setPendingInvitations] = useState<HouseholdInvitation[]>([]);
+  const [sentInvitations, setSentInvitations] = useState<HouseholdInvitation[]>([]);
 
-  // Sync auth household ID with Redux store
+  // Sync auth household ID with Redux store after it has been verified or explicitly created.
   useEffect(() => {
-    if (authHouseholdId && authHouseholdId !== householdId) {
+    dispatch(ledgerActions.resetLedgerState());
+
+    if (user && isValidCloudHouseholdId(authHouseholdId)) {
       dispatch(ledgerActions.setHouseholdId(authHouseholdId));
+      const cached = readUserHouseholdLedgerCache(localStorage, user.uid, authHouseholdId);
+      if (cached) {
+        dispatch(ledgerActions.hydrateFromStorage(cached));
+      }
+      return;
     }
-  }, [authHouseholdId, householdId, dispatch]);
+
+    const cached = readLocalLedgerCache(localStorage);
+    if (cached) {
+      dispatch(ledgerActions.hydrateFromStorage(cached));
+    }
+  }, [authHouseholdId, user?.uid, dispatch]);
+
+  // Verify profile-controlled active cloud ledger on sign-in/profile changes.
+  useEffect(() => {
+    if (!user || profileLoading || !isValidCloudHouseholdId(authHouseholdId)) return;
+    if (household.owner_uid || household.owner_email || permissionDenied) return;
+
+    let cancelled = false;
+    dispatch(ledgerActions.setSyncStatus('syncing'));
+    loadHouseholdOnce({
+      householdDocId: authHouseholdId,
+      dispatch,
+      userUid: user.uid,
+      storage: typeof localStorage !== 'undefined' ? localStorage : undefined,
+    }).then(result => {
+      if (cancelled) return;
+      if (result.ok) {
+        dispatch(ledgerActions.setLastCloudSync(result.syncedAt));
+        dispatch(ledgerActions.setSyncStatus('synced'));
+      } else {
+        dispatch(ledgerActions.setPermissionDenied(result.reason === 'permission_denied'));
+        dispatch(ledgerActions.setSyncStatus(result.reason === 'permission_denied' ? 'offline' : 'error'));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authHouseholdId, dispatch, household.owner_email, household.owner_uid, permissionDenied, profileLoading, user]);
+
+  useEffect(() => {
+    if (
+      !user ||
+      !permissionDenied ||
+      !privateLedgerId ||
+      authHouseholdId === privateLedgerId ||
+      !isValidCloudHouseholdId(privateLedgerId)
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        await setVerifiedHouseholdId(privateLedgerId);
+        if (!cancelled) {
+          dispatch(ledgerActions.setPermissionDenied(false));
+          dispatch(ledgerActions.resetLedgerState());
+        }
+      } catch {
+        if (!cancelled) {
+          dispatch(ledgerActions.setSyncStatus('error'));
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authHouseholdId, dispatch, permissionDenied, privateLedgerId, setVerifiedHouseholdId, user]);
 
   // Keep auth sync status in sync
   useEffect(() => {
@@ -201,77 +303,19 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     }
   }, [syncStatus, setAuthSyncStatus]);
 
-  // 1. Initial Storage Hydration on Mount
-  useEffect(() => {
-    try {
-      const savedHh = localStorage.getItem(STORAGE_KEYS.HOUSEHOLD);
-      const savedCats = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
-      const savedSal = localStorage.getItem(STORAGE_KEYS.SALARY_EVENTS);
-      const savedAllocs = localStorage.getItem(STORAGE_KEYS.ALLOCATIONS);
-      const savedTxs = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-      const savedRecs = localStorage.getItem(STORAGE_KEYS.RECONCILIATIONS);
-      const savedLines = localStorage.getItem(STORAGE_KEYS.RECONCILIATION_LINES);
-      const savedTrs = localStorage.getItem(STORAGE_KEYS.ENVELOPE_TRANSFERS);
-      const savedMems = localStorage.getItem(STORAGE_KEYS.MEMBERS);
-      const savedInvs = localStorage.getItem(STORAGE_KEYS.INVITES);
-      const savedPush = localStorage.getItem(STORAGE_KEYS.PUSH_SETTINGS);
-      const lastReset = localStorage.getItem('env_budget_last_reset_timestamp');
-      const introDone = localStorage.getItem('env_budget_first_time_intro_done') === 'true';
-
-      let parsedHh = savedHh ? JSON.parse(savedHh) : undefined;
-      if (parsedHh && (!parsedHh.name || /preview/i.test(parsedHh.name) || parsedHh.name === 'Our Household Ledger' || parsedHh.name.toLowerCase() === 'preview ledger')) {
-        parsedHh = { ...parsedHh, name: 'Family Budget' };
-        localStorage.setItem(STORAGE_KEYS.HOUSEHOLD, JSON.stringify(parsedHh));
-      }
-
-      dispatch(
-        ledgerActions.hydrateFromStorage({
-          household: parsedHh,
-          categories: savedCats ? JSON.parse(savedCats) : undefined,
-          salaryEvents: savedSal ? JSON.parse(savedSal) : undefined,
-          allocations: savedAllocs ? JSON.parse(savedAllocs) : undefined,
-          transactions: savedTxs ? JSON.parse(savedTxs) : undefined,
-          reconciliations: savedRecs ? JSON.parse(savedRecs) : undefined,
-          reconciliationLines: savedLines ? JSON.parse(savedLines) : undefined,
-          envelopeTransfers: savedTrs ? JSON.parse(savedTrs) : undefined,
-          members: savedMems ? JSON.parse(savedMems) : undefined,
-          invites: savedInvs ? JSON.parse(savedInvs) : undefined,
-          pushSettings: savedPush ? JSON.parse(savedPush) : undefined,
-          firstTimeIntroCompleted: introDone,
-          lastResetAt: lastReset,
-        })
-      );
-    } catch (e) {
-      console.warn('Initial storage hydration note:', e);
-    }
-  }, [dispatch]);
-
-  // 2. Google Account Allowlist & Access Control verification
+  // 2. Google Account household access verification
   const { isAccessAllowed, accessBlockedReason, isOwner } = useMemo(() => {
-    if (
-      !householdId ||
-      householdId === 'hh_family_ledger_main' ||
-      householdId.startsWith('hh_demo') ||
-      householdId.startsWith('hh_preview')
-    ) {
+    if (authLoading || profileLoading) {
       return {
         isAccessAllowed: true,
-        accessBlockedReason: 'none' as const,
-        isOwner: true,
-      };
-    }
-
-    if (authLoading) {
-      return {
-        isAccessAllowed: true,
-        accessBlockedReason: 'none' as const,
+        accessBlockedReason: 'auth_required' as const,
         isOwner: false,
       };
     }
 
     if (!user) {
       return {
-        isAccessAllowed: false,
+        isAccessAllowed: true,
         accessBlockedReason: 'auth_required' as const,
         isOwner: false,
       };
@@ -288,18 +332,19 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     const currentEmail = (user.email || '').trim().toLowerCase();
     const ownerEmail = (household.owner_email || '').trim().toLowerCase();
     const allowedEmails = (household.allowed_emails || []).map(e => e.trim().toLowerCase());
-    const hasRestrictions = Boolean(ownerEmail || allowedEmails.length > 0);
-
-    if (!hasRestrictions) {
+    const hasCloudAcl = Boolean(household.owner_uid || ownerEmail || allowedEmails.length > 0);
+    if (!hasCloudAcl) {
       return {
         isAccessAllowed: true,
         accessBlockedReason: 'none' as const,
-        isOwner: true,
+        isOwner: false,
       };
     }
 
-    const isCurrentOwner = (ownerEmail && currentEmail === ownerEmail) || (household.created_by && user.uid === household.created_by);
-    const isCurrentAllowed = allowedEmails.includes(currentEmail);
+    const isCurrentOwner =
+      Boolean(household.owner_uid && user.uid === household.owner_uid) ||
+      Boolean(household.created_by && user.uid === household.created_by);
+    const isCurrentAllowed = Boolean(currentEmail && (allowedEmails.includes(currentEmail) || ownerEmail === currentEmail));
 
     if (isCurrentOwner || isCurrentAllowed) {
       return {
@@ -314,38 +359,31 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       accessBlockedReason: 'not_in_allowlist' as const,
       isOwner: false,
     };
-  }, [household, householdId, user, permissionDenied, authLoading]);
+  }, [household, user, permissionDenied, authLoading, profileLoading]);
+
+  const hasCloudAcl = Boolean(household.owner_uid || household.owner_email || (household.allowed_emails || []).length > 0);
+  const hasVerifiedCloudHousehold = Boolean(user && hasCloudAcl && isValidCloudHouseholdId(householdId));
+
+  useEffect(() => {
+    configureSyncAuth({
+      uid: user?.uid || null,
+      email: user?.email || null,
+      isAccessAllowed: Boolean(user && isAccessAllowed && hasVerifiedCloudHousehold),
+    });
+  }, [user?.uid, user?.email, isAccessAllowed, hasVerifiedCloudHousehold]);
 
   // 3. Realtime Firestore Subscription
   useEffect(() => {
-    if (!householdId || !isAccessAllowed) return;
-    const unsubscribe = subscribeToFirestoreHousehold(householdId, user?.email, dispatch);
+    if (!householdId || !user?.email || !isAccessAllowed || !hasVerifiedCloudHousehold) return;
+    const unsubscribe = subscribeToFirestoreHousehold(householdId, user.email, dispatch);
     return () => {
       unsubscribe();
     };
-  }, [householdId, isAccessAllowed, user?.email, dispatch]);
+  }, [householdId, isAccessAllowed, hasVerifiedCloudHousehold, user?.email, dispatch]);
 
-  // 4. If user signs into a household with no established owner, claim ownership
+  // 4. Auto-sync Google user profile into household members roster
   useEffect(() => {
-    if (!user || !user.email) return;
-    const email = user.email.trim().toLowerCase();
-
-    if (!household.owner_email && (!household.allowed_emails || household.allowed_emails.length === 0)) {
-      dispatch(
-        ledgerActions.setHousehold({
-          ...household,
-          owner_email: email,
-          allowed_emails: [email],
-          created_by: user.uid,
-          updated_at: new Date().toISOString(),
-        })
-      );
-    }
-  }, [user, household, dispatch]);
-
-  // 5. Auto-sync Google user profile into household members roster
-  useEffect(() => {
-    if (!user || !isAccessAllowed) return;
+    if (!user || !isAccessAllowed || !hasVerifiedCloudHousehold) return;
     const uid = user.uid;
 
     try {
@@ -367,7 +405,7 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
         })
       );
     }
-  }, [user, isAccessAllowed, members, dispatch]);
+  }, [user, isAccessAllowed, hasVerifiedCloudHousehold, members, dispatch]);
 
   // Actions Facade
   const setSelectedMonthHandler = useCallback((month: string) => {
@@ -673,30 +711,16 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     return { success: true };
   }, [dispatch, activeMember.user_id]);
 
-  const createInviteHandler = useCallback((): Invite => {
-    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-    dispatch(ledgerActions.createInvite({ code, createdBy: activeMember.user_id }));
-    const now = new Date();
-    return {
-      id: `inv_${Date.now()}`,
-      household_id: household.id,
-      code,
-      created_by: activeMember.user_id,
-      created_at: now.toISOString(),
-      expires_at: new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString(),
-    };
-  }, [dispatch, activeMember.user_id, household.id]);
-
-  const revokeInviteHandler = useCallback((inviteId: string) => {
-    dispatch(ledgerActions.revokeInvite(inviteId));
-  }, [dispatch]);
-
   const updatePushSettingsHandler = useCallback((reminder_time: string, enabled: boolean) => {
     dispatch(ledgerActions.updatePushSettings({ reminder_time, enabled }));
   }, [dispatch]);
 
   // ATOMIC ZERO RESET
-  const resetLedgerToZeroHandler = useCallback(async (isFirstTimeIntro: boolean = false) => {
+  const resetLedgerToZeroHandler = useCallback(async (_isFirstTimeIntro: boolean = false): Promise<SyncResult> => {
+    if (user && hasVerifiedCloudHousehold && !isOwner) {
+      return { ok: false, reason: 'permission_denied', message: 'Only the household owner can reset a shared cloud ledger.' };
+    }
+
     const resetIso = new Date().toISOString();
     const customUserName = localStorage.getItem('env_budget_user_name') || undefined;
 
@@ -708,72 +732,186 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       })
     );
 
-    // 2. Mark intro completed on server API if present
-    try {
-      fetch(`/api/household/${householdId}/complete-intro`, { method: 'POST' }).catch(() => {});
-    } catch {}
+    // 2. Immediately flush state to Firestore when Google-authenticated sync is allowed.
+    if (user && hasVerifiedCloudHousehold) {
+      return await flushSyncNow();
+    }
 
-    // 3. Immediately flush state to Firestore
-    await flushSyncNow();
-  }, [dispatch, householdId]);
+    return { ok: true, syncedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), version: 0 };
+  }, [dispatch, hasVerifiedCloudHousehold, isOwner, user]);
 
-  const syncNowHandler = useCallback(async () => {
+  const syncNowHandler = useCallback(async (): Promise<SyncResult> => {
     dispatch(ledgerActions.setPermissionDenied(false));
     const stopLoader = startApiCall('Syncing ledger with Firestore...');
     try {
-      await flushSyncNow();
+      return await flushSyncNow();
     } finally {
       stopLoader();
     }
   }, [dispatch, startApiCall]);
 
-  const addAllowedEmailHandler = useCallback(async (emailInput: string) => {
-    const email = emailInput.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      return { success: false, error: 'Please enter a valid Google email address (e.g., spouse@gmail.com).' };
+  const recoverSyncHandler = useCallback(async (): Promise<SyncResult> => {
+    return await flushSyncNow();
+  }, []);
+
+  const refreshHouseholdInvitationsHandler = useCallback(async (): Promise<void> => {
+    if (!user?.email) {
+      setPendingInvitations([]);
+      setSentInvitations([]);
+      return;
     }
 
-    const currentAllowed = (household.allowed_emails || []).map(e => e.trim().toLowerCase());
-    if (currentAllowed.includes(email)) {
-      return { success: false, error: 'This email is already on the allowlist.' };
+    const [pending, sent] = await Promise.all([
+      listPendingHouseholdInvitations(user.email),
+      isOwner && isValidCloudHouseholdId(householdId)
+        ? listOwnedHouseholdInvitations({ householdId, inviterUid: user.uid })
+        : Promise.resolve([]),
+    ]);
+    setPendingInvitations(pending);
+    setSentInvitations(sent);
+  }, [householdId, isOwner, user?.email, user?.uid]);
+
+  const addAllowedEmailHandler = useCallback(async (emailInput: string): Promise<SyncResult> => {
+    if (!user || !user.email || !isOwner) {
+      return { ok: false, reason: 'permission_denied', message: 'Only the household owner can send household requests.' };
     }
 
-    const ownerEmail = (household.owner_email || user?.email || '').trim().toLowerCase();
-    const newAllowed = Array.from(new Set([...(ownerEmail ? [ownerEmail] : []), ...currentAllowed, email]));
+    const result = await createHouseholdInvitation({
+      householdId,
+      householdName: household.name,
+      inviterUid: user.uid,
+      inviterEmail: user.email,
+      inviteeEmail: emailInput,
+    });
+    if (result.ok) await refreshHouseholdInvitationsHandler();
+    return result;
+  }, [household.name, householdId, isOwner, refreshHouseholdInvitationsHandler, user]);
 
-    const updatedHousehold: Household = {
-      ...household,
-      owner_email: household.owner_email || ownerEmail || email,
-      allowed_emails: newAllowed,
-      updated_at: new Date().toISOString(),
-    };
+  const removeAllowedEmailHandler = useCallback(async (emailInput: string): Promise<SyncResult> => {
+    if (!user || !isOwner) {
+      return { ok: false, reason: 'permission_denied', message: 'Only the household owner can manage Google account access.' };
+    }
 
-    dispatch(ledgerActions.setHousehold(updatedHousehold));
-    await flushSyncNow();
-    return { success: true };
-  }, [household, user?.email, dispatch]);
-
-  const removeAllowedEmailHandler = useCallback(async (emailInput: string) => {
     const email = emailInput.trim().toLowerCase();
-    const ownerEmail = (household.owner_email || '').trim().toLowerCase();
+    const ownerEmail = (household.owner_email || user.email || '').trim().toLowerCase();
     if (email === ownerEmail) {
-      return { success: false, error: 'Cannot remove the primary household owner from the allowlist.' };
+      return { ok: false, reason: 'permission_denied', message: 'Cannot remove the primary household owner from household access.' };
     }
 
+    const member = members.find(item => item.email?.trim().toLowerCase() === email && !item.deleted_at);
+    if (!member) {
+      return { ok: false, reason: 'unknown', message: 'Only accepted household members can be revoked here. Revoke pending requests from the requests list.' };
+    }
+
+    const ownerUid = household.owner_uid || household.created_by || user.uid;
+    const result = await revokeHouseholdMemberAccess({
+      householdId,
+      ownerUid,
+      memberUid: member.user_id,
+      memberEmail: email,
+    });
+    if (!result.ok) return result;
+
     const currentAllowed = (household.allowed_emails || []).map(e => e.trim().toLowerCase());
-    const newAllowed = currentAllowed.filter(e => e !== email);
-
-    const updatedHousehold: Household = {
+    const currentMemberUids = household.member_uids || [];
+    dispatch(ledgerActions.setHousehold({
       ...household,
-      allowed_emails: newAllowed,
+      owner_uid: ownerUid,
+      owner_email: ownerEmail,
+      allowed_emails: Array.from(new Set([...(ownerEmail ? [ownerEmail] : []), ...currentAllowed.filter(item => item !== email)])),
+      member_uids: currentMemberUids.filter(uid => uid !== member.user_id),
+      created_by: ownerUid,
       updated_at: new Date().toISOString(),
-    };
+    }));
+    dispatch(ledgerActions.deleteMember(member.user_id));
+    await refreshHouseholdInvitationsHandler();
+    return result;
+  }, [dispatch, household, householdId, isOwner, members, refreshHouseholdInvitationsHandler, user]);
 
-    dispatch(ledgerActions.setHousehold(updatedHousehold));
-    await flushSyncNow();
-    return { success: true };
-  }, [household, dispatch]);
+  useEffect(() => {
+    void refreshHouseholdInvitationsHandler();
+  }, [refreshHouseholdInvitationsHandler]);
+
+  const acceptInvitationHandler = useCallback(async (invitationId: string): Promise<SyncResult> => {
+    if (!user?.email) {
+      return { ok: false, reason: 'signed_out', message: 'Sign in before accepting a household request.' };
+    }
+
+    const result = await acceptHouseholdInvitation({
+      invitationId,
+      userUid: user.uid,
+      userEmail: user.email,
+      displayName: user.displayName,
+      photoURL: user.photoURL,
+    });
+    if (result.ok && result.householdId) {
+      await setVerifiedHouseholdId(result.householdId);
+      await refreshHouseholdInvitationsHandler();
+      dispatch(ledgerActions.resetLedgerState());
+    }
+    return result;
+  }, [dispatch, refreshHouseholdInvitationsHandler, setVerifiedHouseholdId, user]);
+
+  const declineInvitationHandler = useCallback(async (invitationId: string): Promise<SyncResult> => {
+    if (!user?.email) {
+      return { ok: false, reason: 'signed_out', message: 'Sign in before declining a household request.' };
+    }
+
+    const result = await declineHouseholdInvitation({ invitationId, userEmail: user.email });
+    if (result.ok) await refreshHouseholdInvitationsHandler();
+    return result;
+  }, [refreshHouseholdInvitationsHandler, user?.email]);
+
+  const revokeInvitationHandler = useCallback(async (invitationId: string): Promise<SyncResult> => {
+    if (!user || !isOwner) {
+      return { ok: false, reason: 'permission_denied', message: 'Only the household owner can revoke household requests.' };
+    }
+
+    const result = await revokeHouseholdInvitation({ invitationId });
+    if (result.ok) await refreshHouseholdInvitationsHandler();
+    return result;
+  }, [isOwner, refreshHouseholdInvitationsHandler, user]);
+
+  const leaveCurrentHouseholdHandler = useCallback(async (): Promise<SyncResult> => {
+    if (!user?.email || !privateLedgerId) {
+      return { ok: false, reason: 'signed_out', message: 'Sign in before leaving a household.' };
+    }
+    if (isOwner) {
+      return { ok: false, reason: 'permission_denied', message: 'The owner cannot leave their owned household. Reset or delete the household instead.' };
+    }
+
+    const result = await leaveHousehold({
+      householdId,
+      privateLedgerId,
+      userUid: user.uid,
+      userEmail: user.email,
+    });
+    if (result.ok) {
+      await setVerifiedHouseholdId(privateLedgerId);
+      dispatch(ledgerActions.resetLedgerState());
+    }
+    return result;
+  }, [dispatch, householdId, isOwner, privateLedgerId, setVerifiedHouseholdId, user]);
+
+  useEffect(() => {
+    if (!user || !hasVerifiedCloudHousehold) {
+      persistLocalLedgerCache(localStorage, store.getState().ledger);
+    }
+  }, [user, hasVerifiedCloudHousehold, householdId, members, categories, salaryEvents, allocations, transactions, reconciliations, reconciliationLines, envelopeTransfers]);
+
+  useSyncRecovery({
+    enabled: Boolean(user && hasVerifiedCloudHousehold && isAccessAllowed),
+    isSyncing: syncStatus === 'syncing',
+    onRecover: recoverSyncHandler,
+  });
+
+  const cloudSetupStatus = useMemo(() => {
+    if (authLoading || profileLoading || syncStatus === 'syncing') return 'verifying' as const;
+    if (!user) return 'local_only' as const;
+    if (permissionDenied || !isAccessAllowed) return 'access_denied' as const;
+    if (hasVerifiedCloudHousehold) return 'verified' as const;
+    return 'local_only' as const;
+  }, [authLoading, hasVerifiedCloudHousehold, isAccessAllowed, permissionDenied, profileLoading, syncStatus, user]);
 
   const contextValue: BudgetContextType = useMemo(
     () => ({
@@ -788,7 +926,6 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       reconciliations,
       reconciliationLines,
       envelopeTransfers,
-      invites,
       selectedMonth,
       setSelectedMonth: setSelectedMonthHandler,
       categoryBalances,
@@ -817,14 +954,16 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       updateMemberName: updateMemberNameHandler,
       updateMemberProfile: updateMemberProfileHandler,
       deleteMember: deleteMemberHandler,
-      createInvite: createInviteHandler,
-      revokeInvite: revokeInviteHandler,
       updatePushSettings: updatePushSettingsHandler,
       resetLedgerToZero: resetLedgerToZeroHandler,
       isFirstTimeIntroCompleted,
       householdId,
       cloudSyncStatus: syncStatus === 'idle' ? 'synced' : syncStatus,
+      cloudSetupStatus,
       lastCloudSync,
+      pendingInvitations,
+      sentInvitations,
+      refreshHouseholdInvitations: refreshHouseholdInvitationsHandler,
       syncNow: syncNowHandler,
       isAccessAllowed,
       authLoading,
@@ -832,6 +971,10 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       isOwner,
       addAllowedEmail: addAllowedEmailHandler,
       removeAllowedEmail: removeAllowedEmailHandler,
+      acceptInvitation: acceptInvitationHandler,
+      declineInvitation: declineInvitationHandler,
+      revokeInvitation: revokeInvitationHandler,
+      leaveCurrentHousehold: leaveCurrentHouseholdHandler,
     }),
     [
       household,
@@ -845,7 +988,6 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       reconciliations,
       reconciliationLines,
       envelopeTransfers,
-      invites,
       selectedMonth,
       setSelectedMonthHandler,
       categoryBalances,
@@ -874,14 +1016,16 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       updateMemberNameHandler,
       updateMemberProfileHandler,
       deleteMemberHandler,
-      createInviteHandler,
-      revokeInviteHandler,
       updatePushSettingsHandler,
       resetLedgerToZeroHandler,
       isFirstTimeIntroCompleted,
       householdId,
       syncStatus,
+      cloudSetupStatus,
       lastCloudSync,
+      pendingInvitations,
+      sentInvitations,
+      refreshHouseholdInvitationsHandler,
       syncNowHandler,
       isAccessAllowed,
       authLoading,
@@ -889,6 +1033,10 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       isOwner,
       addAllowedEmailHandler,
       removeAllowedEmailHandler,
+      acceptInvitationHandler,
+      declineInvitationHandler,
+      revokeInvitationHandler,
+      leaveCurrentHouseholdHandler,
     ]
   );
 

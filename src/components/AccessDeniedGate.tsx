@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBudget } from '../context/BudgetContext';
-import { ShieldAlert, LogIn, RefreshCw, LogOut, ArrowRight, CheckCircle2, Lock, Sparkles } from 'lucide-react';
+import { ShieldAlert, LogIn, RefreshCw, LogOut, Lock } from 'lucide-react';
 
 interface AccessDeniedGateProps {
-  onCheckAgain: () => void;
+  onCheckAgain: () => Promise<unknown> | unknown;
 }
 
 export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain }) => {
-  const { user, signInWithGoogle, logout, setHouseholdId } = useAuth();
-  const { household, householdId, accessBlockedReason } = useBudget();
-  const [customHhInput, setCustomHhInput] = useState('');
-  const [isSwitchingHh, setIsSwitchingHh] = useState(false);
+  const { user, signInWithGoogle, logout } = useAuth();
+  const { household, accessBlockedReason } = useBudget();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
 
@@ -32,15 +30,6 @@ export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain
       await onCheckAgain();
     } finally {
       setTimeout(() => setIsChecking(false), 500);
-    }
-  };
-
-  const handleSwitchHousehold = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (customHhInput.trim()) {
-      setHouseholdId(customHhInput.trim());
-      setCustomHhInput('');
-      setIsSwitchingHh(false);
     }
   };
 
@@ -71,17 +60,17 @@ export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain
             <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-2 leading-relaxed">
               {isAuthRequired ? (
                 <>
-                  Household <strong className="text-[#1F1B16] dark:text-[#EDE8E1]">{household?.name || householdId}</strong> is restricted to authorized Google accounts. Sign in to verify your access.
+                  This shared household ledger is restricted to authorized Google accounts. Sign in to verify your access.
                 </>
               ) : (
                 <>
-                  You are signed in as <strong className="text-[#1F1B16] dark:text-[#EDE8E1]">{user?.email}</strong>, but this Google account has not been added to the allowlist for Household <strong className="text-[#1F1B16] dark:text-[#EDE8E1]">{household?.name || householdId}</strong>.
+                  You are signed in as <strong className="text-[#1F1B16] dark:text-[#EDE8E1]">{user?.email}</strong>, but this Google account has not accepted a household request for <strong className="text-[#1F1B16] dark:text-[#EDE8E1]">{household?.name || 'this shared household'}</strong>.
                 </>
               )}
             </p>
           </div>
 
-          {/* Not in allowlist - Instructions Box */}
+          {/* Access request instructions */}
           {!isAuthRequired && (
             <div className="mb-6 p-4 rounded-2xl bg-[#EFEAE1]/60 dark:bg-[#241F1B]/60 border border-[#E8E3DA] dark:border-[#2D2823] space-y-2.5 text-xs text-[#1F1B16] dark:text-[#EDE8E1]">
               <span className="font-semibold text-xs text-[#78716C] dark:text-[#A8A29E] uppercase tracking-wider block">
@@ -90,7 +79,7 @@ export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain
               <div className="space-y-1.5 text-[11px] text-[#78716C] dark:text-[#A8A29E]">
                 <div className="flex items-start gap-2">
                   <span className="w-4 h-4 rounded-full bg-[#4E785E]/15 text-[#4E785E] font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
-                  <span>Ask the household owner {household?.owner_email ? `(${household.owner_email})` : ''} to open <strong>Settings → Google Account Allowlist</strong>.</span>
+                  <span>Ask the household owner {household?.owner_email ? `(${household.owner_email})` : ''} to open <strong>Members</strong> and send a request to your Google email.</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="w-4 h-4 rounded-full bg-[#4E785E]/15 text-[#4E785E] font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
@@ -137,51 +126,11 @@ export const AccessDeniedGate: React.FC<AccessDeniedGateProps> = ({ onCheckAgain
             )}
           </div>
 
-          {/* Household Switcher & Connect */}
-          <div className="pt-4 border-t border-[#E8E3DA] dark:border-[#2D2823] space-y-3">
-            {!isSwitchingHh ? (
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={() => setIsSwitchingHh(true)}
-                  className="w-full text-center text-xs text-[#78716C] dark:text-[#A8A29E] hover:underline cursor-pointer py-1"
-                >
-                  Connect to a different Household ID →
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSwitchHousehold} className="space-y-2">
-                <label className="text-[11px] font-medium text-[#78716C] dark:text-[#A8A29E] block">
-                  Enter Household ID:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={customHhInput}
-                    onChange={e => setCustomHhInput(e.target.value)}
-                    placeholder="e.g. hh_family_ledger_main"
-                    className="flex-1 px-3 py-1.5 rounded-lg border border-[#E8E3DA] dark:border-[#2D2823] bg-white dark:bg-[#141210] text-xs text-[#1F1B16] dark:text-[#EDE8E1] outline-none"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!customHhInput.trim()}
-                    className="px-3 py-1.5 rounded-lg bg-[#4E785E] text-white text-xs font-semibold hover:bg-[#436851] transition-colors disabled:opacity-40 cursor-pointer"
-                  >
-                    Join
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsSwitchingHh(false)}
-                    className="px-2.5 py-1.5 rounded-lg border border-[#E8E3DA] dark:border-[#2D2823] text-xs text-[#78716C] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div className="text-center pt-2 text-[10px] text-[#78716C] dark:text-[#A8A29E]">
-              Current Household ID: <code className="font-mono">{householdId}</code>
-            </div>
+          {/* Household Access Context */}
+          <div className="pt-4 border-t border-[#E8E3DA] dark:border-[#2D2823] space-y-2 text-center">
+            <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] leading-relaxed">
+              Ledger IDs are internal. Access is granted only after the owner sends a request and you accept it with the matching Google account.
+            </p>
           </div>
         </div>
       </div>

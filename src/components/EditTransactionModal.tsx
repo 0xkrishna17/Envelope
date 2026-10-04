@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { Transaction, PaymentMethod } from '../types';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { ArrowLeft, X, Trash2, Check, Lock, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface EditTransactionModalProps {
@@ -65,7 +66,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
     if (isLocked) {
       // Amount and category are locked, only date and note can be updated
       updateTransaction(transaction.id, {
-        date,
+        date: clampDateInputToToday(date),
         note: note.trim() || undefined,
       });
     } else {
@@ -78,7 +79,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
         amount: finalPaise,
         category_id: categoryId,
         payment_method: paymentMethod,
-        date,
+        date: clampDateInputToToday(date),
         note: note.trim() || undefined,
       });
     }
@@ -91,7 +92,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
       alert('This transaction has already been partially or fully reconciled in a credit card payback. You cannot delete it directly. Please use "Log a correction" to offset the amount.');
       return;
     }
-    if (window.confirm('Delete this transaction? The category balance will recompute instantly.')) {
+    if (window.confirm('Reverse this transaction? The original TID stays in history and a new reversal entry will offset its amount.')) {
       deleteTransaction(transaction.id);
       handleBack();
     }
@@ -114,17 +115,17 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-edit-tx-modal"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
           <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
-            Edit Entry
+            Adjust Entry
           </span>
           <span className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-            (Logged by {member?.name || 'Partner'})
+            TID {transaction.id} · logged by {member?.name || 'Partner'}
           </span>
         </div>
       </div>
@@ -220,7 +221,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                   disabled={isLocked}
                   onChange={e => setAmountStr(e.target.value)}
                   id="edit-amount-input"
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-2xl font-amount font-semibold ${
+                  className={`w-full min-h-11 pl-10 pr-4 py-2.5 rounded-xl text-2xl font-amount font-semibold ${
                     isLocked
                       ? 'bg-transparent border border-dashed border-[#DCD5C9] text-[#78716C] cursor-not-allowed'
                       : 'bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] text-[#1F1B16] dark:text-[#EDE8E1]'
@@ -262,7 +263,8 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                 <input
                   type="date"
                   value={date}
-                  onChange={e => setDate(e.target.value)}
+                  max={getTodayDateInputValue()}
+                  onChange={e => setDate(clampDateInputToToday(e.target.value))}
                   id="edit-date-input"
                   className="w-full px-3 py-2 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1]"
                 />
@@ -313,7 +315,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                   className="flex-1 py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-xs flex items-center justify-center gap-1.5 shadow-xs"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Update Entry</span>
+                  <span>Save as New Adjustment</span>
                 </button>
               </div>
 

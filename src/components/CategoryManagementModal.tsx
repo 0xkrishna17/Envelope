@@ -94,9 +94,9 @@ export const CategoryManagement: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col gap-4 animate-in fade-in pb-16">
+    <div className="flex flex-col gap-4 animate-in fade-in pb-28 sm:pb-20">
       {/* Header card with create button */}
-      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 shadow-xs flex items-center justify-between">
+      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
             Manage Envelope Categories
@@ -106,7 +106,7 @@ export const CategoryManagement: React.FC = () => {
           <button
             onClick={startCreate}
             id="add-category-btn"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90"
+            className="min-h-11 sm:min-h-10 flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-sm sm:text-xs font-semibold shadow-xs hover:opacity-90"
           >
             <Plus className="w-4 h-4" />
             <span>New Envelope</span>
@@ -158,7 +158,7 @@ export const CategoryManagement: React.FC = () => {
                 required
                 disabled={editingCategory?.is_unallocated}
                 id="cat-name-input"
-                className="w-full px-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-2 focus:ring-[#4E785E]"
+                className="w-full min-h-11 px-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-2 focus:ring-[#4E785E]"
               />
             </div>
 
@@ -174,7 +174,7 @@ export const CategoryManagement: React.FC = () => {
                   value={targetRupees}
                   onChange={e => setTargetRupees(e.target.value)}
                   id="cat-target-input"
-                  className="w-full pl-7 pr-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs font-amount text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none"
+                  className="w-full min-h-11 pl-7 pr-3 py-2 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs font-amount text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none"
                 />
               </div>
             </div>
@@ -214,14 +214,14 @@ export const CategoryManagement: React.FC = () => {
             <label className="text-xs font-medium text-[#78716C] block mb-1.5">
               Envelope Icon
             </label>
-            <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5 max-h-32 overflow-y-auto p-1 bg-[#FAF7F2] dark:bg-[#1A1714] rounded-xl border border-[#DCD5C9] dark:border-[#3D362F]">
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 max-h-48 sm:max-h-32 overflow-y-auto p-1 bg-[#FAF7F2] dark:bg-[#1A1714] rounded-xl border border-[#DCD5C9] dark:border-[#3D362F]">
               {AVAILABLE_ICONS.map(iconName => (
                 <button
                   key={iconName}
                   type="button"
                   onClick={() => setIcon(iconName)}
                   id={`icon-picker-${iconName}`}
-                  className={`p-2 rounded-lg flex items-center justify-center transition-all ${
+                  className={`min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 p-2 rounded-lg flex items-center justify-center transition-all ${
                     icon === iconName
                       ? 'bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714]'
                       : 'text-[#78716C] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
@@ -262,7 +262,7 @@ export const CategoryManagement: React.FC = () => {
           .map(cat => (
             <div
               key={cat.id}
-              className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
+              className={`flex items-start justify-between gap-3 p-3.5 rounded-2xl border transition-all ${
                 editingCategory?.id === cat.id
                   ? 'bg-[#4E785E]/10 dark:bg-[#4E785E]/15 border-[#4E785E] ring-2 ring-[#4E785E]/30 shadow-xs'
                   : cat.is_archived
@@ -270,16 +270,16 @@ export const CategoryManagement: React.FC = () => {
                   : 'bg-[#FAF7F2] dark:bg-[#1A1714] border-[#E8E3DA] dark:border-[#2D2823] shadow-xs'
               }`}
             >
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-start gap-3 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
                   style={{ backgroundColor: cat.color }}
                 >
                   {renderCategoryIcon(cat.icon, 'w-4 h-4')}
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] truncate">
+                <div className="min-w-0 flex-1 basis-32">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="text-sm sm:text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] break-words min-w-0">
                       {cat.name}
                     </span>
                     {cat.is_unallocated && (
@@ -294,7 +294,7 @@ export const CategoryManagement: React.FC = () => {
                     )}
                   </div>
                   {cat.target_amount ? (
-                    <span className="text-[11px] text-[#78716C] dark:text-[#A8A29E] block">
+                    <span className="text-xs sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] block mt-0.5">
                       Target: {formatPaise(cat.target_amount)}
                     </span>
                   ) : null}
@@ -302,20 +302,20 @@ export const CategoryManagement: React.FC = () => {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-end gap-1.5 shrink-0 self-start">
                 {!cat.is_unallocated && (
                   <button
                     onClick={() => startEdit(cat)}
                     id={`edit-cat-${cat.id}`}
-                    className={`p-2 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                    className={`h-10 min-h-10 min-w-10 px-2 rounded-lg border text-xs font-medium inline-grid grid-flow-col place-items-center gap-1.5 transition-colors cursor-pointer ${
                       editingCategory?.id === cat.id
                         ? 'bg-[#4E785E] text-white border-[#4E785E] shadow-2xs'
                         : 'border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:text-[#1F1B16] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
                     }`}
                     title="Edit Envelope"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    {editingCategory?.id === cat.id && <span className="text-[11px]">Editing</span>}
+                    <Edit2 className="block w-3.5 h-3.5 shrink-0" />
+                    {editingCategory?.id === cat.id && <span className="text-[11px] leading-none">Editing</span>}
                   </button>
                 )}
 
@@ -324,20 +324,20 @@ export const CategoryManagement: React.FC = () => {
                     <button
                       onClick={() => unarchiveCategory(cat.id)}
                       id={`unarchive-cat-${cat.id}`}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#CADBCE] text-[#2C523B] text-xs font-medium hover:bg-[#EBF2ED]"
+                      className="h-10 min-h-10 min-w-10 px-2.5 rounded-lg border border-[#CADBCE] text-[#2C523B] text-xs font-medium hover:bg-[#EBF2ED] inline-grid grid-flow-col place-items-center gap-1"
                       title="Unarchive Envelope"
                     >
-                      <ArchiveRestore className="w-3.5 h-3.5" />
-                      <span>Restore</span>
+                      <ArchiveRestore className="block w-3.5 h-3.5 shrink-0" />
+                      <span className="leading-none">Restore</span>
                     </button>
                   ) : (
                     <button
                       onClick={() => archiveCategory(cat.id)}
                       id={`archive-cat-${cat.id}`}
-                      className="p-2 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:text-[#AF7832] transition-colors"
+                      className="h-10 min-h-10 w-10 min-w-10 p-0 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:text-[#AF7832] transition-colors grid place-items-center"
                       title="Archive Envelope (Never deletes money or pending payback)"
                     >
-                      <Archive className="w-3.5 h-3.5" />
+                      <Archive className="block w-3.5 h-3.5 shrink-0" />
                     </button>
                   )
                 )}

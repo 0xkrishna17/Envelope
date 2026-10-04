@@ -27,10 +27,10 @@ import { usePwaInstall } from './hooks/usePwaInstall';
 import { ApiLoadingProvider } from './context/ApiLoadingContext';
 import { formatPaise, paiseToWords } from './utils/currency';
 import { Transaction, ActiveTab } from './types';
-import { Plus, PlusCircle, Wallet, RefreshCw, Layers, ShieldCheck, ArrowRight, ArrowLeftRight, Settings, CheckCircle2, X, User, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, PlusCircle, Wallet, RefreshCw, Layers, ShieldCheck, ArrowRight, ArrowLeftRight, Settings, User, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // App version as instructed by user: "lets add version no of app and with each iteration lets keep increasing version no at bottom right in small text."
-export const APP_VERSION = 'v1.4.36';
+export const APP_VERSION = 'v1.0.0';
 
 function BudgetAppContent() {
   const {
@@ -40,31 +40,16 @@ function BudgetAppContent() {
     categories,
     selectedMonth,
     setSelectedMonth,
-    resetLedgerToZero,
     isFirstTimeIntroCompleted,
     isAccessAllowed,
+    cloudSetupStatus,
     syncNow,
   } = useBudget();
 
   const { isInstalled, showInstallGuide, triggerInstall, closeInstallGuide, hasNativePrompt } = usePwaInstall();
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
-  const { user, loading: authLoading, setHouseholdId } = useAuth();
-  const [partnerConnectedBanner, setPartnerConnectedBanner] = useState<string | null>(null);
-
-  // Auto-connect when partner opens a shared public link (?household=... or ?code=...)
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const sharedHh = params.get('household');
-      if (sharedHh) {
-        setHouseholdId(sharedHh);
-        setPartnerConnectedBanner(`Connected to household "${sharedHh}"! Both of your devices are now synchronized.`);
-      }
-    } catch (e) {
-      console.error('Error reading url params:', e);
-    }
-  }, []);
+  const { user, loading: authLoading, profileLoading, userProfileCompleted, userIntroCompleted, markUserIntroCompleted } = useAuth();
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('envelopes');
@@ -73,7 +58,7 @@ function BudgetAppContent() {
   type ActiveScreen =
     | { type: 'log-expense'; preselectedCatId?: string; initialValues?: any }
     | { type: 'envelope-detail'; categoryId: string }
-    | { type: 'salary-arrival' }
+    | { type: 'salary-arrival'; initialAmountPaise?: number }
     | { type: 'reconcile'; categoryId?: string }
     | { type: 'add-funds'; categoryId?: string; initialAmount?: number }
     | { type: 'move-funds'; fromCatId?: string; toCatId?: string; amountPaise?: number }
@@ -92,26 +77,39 @@ function BudgetAppContent() {
   };
 
   useEffect(() => {
-    const hasCompletedProfile = localStorage.getItem('env_budget_profile_completed');
+    if (authLoading || profileLoading) return;
+
+    const hasCompletedProfile = user
+      ? userProfileCompleted
+      : localStorage.getItem('env_budget_profile_completed') === 'true';
 
     if (!hasCompletedProfile) {
       const timer = setTimeout(() => {
         setCurrentScreen({ type: 'profile', isOnboarding: true });
       }, 400);
       return () => clearTimeout(timer);
-    } else if (!isFirstTimeIntroCompleted) {
-      const timer = setTimeout(() => {
-        handleOpenTourSafely();
-      }, 500);
-      return () => clearTimeout(timer);
+    } else {
+      const hasCompletedIntro = user
+        ? userIntroCompleted || isFirstTimeIntroCompleted
+        : isFirstTimeIntroCompleted || localStorage.getItem('env_budget_first_time_intro_done') === 'true';
+
+      if (!hasCompletedIntro) {
+        const timer = setTimeout(() => {
+          handleOpenTourSafely();
+        }, 500);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [isFirstTimeIntroCompleted]);
+  }, [authLoading, isFirstTimeIntroCompleted, profileLoading, user, userIntroCompleted, userProfileCompleted]);
 
   const handleCloseProfileScreen = () => {
     const wasOnboarding = currentScreen?.type === 'profile' && currentScreen.isOnboarding;
     setCurrentScreen(null);
     if (wasOnboarding) {
-      if (!isFirstTimeIntroCompleted) {
+      const hasCompletedIntro = user
+        ? userIntroCompleted || isFirstTimeIntroCompleted
+        : isFirstTimeIntroCompleted || localStorage.getItem('env_budget_first_time_intro_done') === 'true';
+      if (!hasCompletedIntro) {
         setTimeout(() => {
           handleOpenTourSafely();
         }, 250);
@@ -140,6 +138,8 @@ function BudgetAppContent() {
     return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
   }, [selectedMonth]);
 
+  const activeEnvelopeCount = categories.filter(c => !c.deleted_at && !c.is_archived).length;
+
   // Screen openers
   const handleOpenAddFunds = (catId?: string) => {
     setCurrentScreen({ type: 'add-funds', categoryId: catId });
@@ -165,25 +165,7 @@ function BudgetAppContent() {
     setCurrentScreen({ type: 'envelope-detail', categoryId: catId });
   };
 
-  const handleCommitVoiceTransaction = (params: {
-    amountPaise: number;
-    categoryId: string;
-    paymentMethod: any;
-    note?: string;
-  }) => {
-    setCurrentScreen({
-      type: 'log-expense',
-      preselectedCatId: params.categoryId,
-      initialValues: {
-        amountPaise: params.amountPaise,
-        categoryId: params.categoryId,
-        paymentMethod: params.paymentMethod,
-        note: params.note,
-      },
-    });
-  };
-
-  if (!isAccessAllowed && !authLoading) {
+  if (cloudSetupStatus === 'access_denied' && !authLoading) {
     return (
       <div className="min-h-screen bg-[#FAF7F2] text-[#1F1B16] dark:bg-[#1A1714] dark:text-[#EDE8E1] flex flex-col antialiased selection:bg-[#E8C5BC] selection:text-[#87341D]">
         <Header
@@ -244,22 +226,7 @@ function BudgetAppContent() {
       />
 
       {/* Main Body */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5">
-        {partnerConnectedBanner && (
-          <div className="mb-4 p-3 rounded-xl bg-[#4E785E]/10 border border-[#4E785E]/30 text-[#2C523B] dark:text-[#A1D1B1] text-xs flex items-center justify-between animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-[#4E785E] shrink-0" />
-              <span>{partnerConnectedBanner}</span>
-            </div>
-            <button
-              onClick={() => setPartnerConnectedBanner(null)}
-              className="p-1 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] rounded cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-5 py-4 sm:py-6">
         {/* Dedicated Screens (replacing modals with proper screens) */}
         {currentScreen ? (
           <div className="animate-in fade-in duration-150">
@@ -301,6 +268,11 @@ function BudgetAppContent() {
             {currentScreen.type === 'salary-arrival' && (
               <SalaryArrivalScreen
                 onBack={() => setCurrentScreen(null)}
+                onSuccessOpenChecklist={() => {
+                  setActiveTab('envelopes');
+                  setCurrentScreen(null);
+                }}
+                initialAmountPaise={currentScreen.initialAmountPaise}
               />
             )}
 
@@ -338,8 +310,7 @@ function BudgetAppContent() {
             {currentScreen.type === 'voice-input' && (
               <VoiceInputScreen
                 onBack={() => setCurrentScreen(null)}
-                onCommitAddTransaction={handleCommitVoiceTransaction}
-                onOpenSalaryFlow={() => setCurrentScreen({ type: 'salary-arrival' })}
+                onOpenSalaryFlow={amountPaise => setCurrentScreen({ type: 'salary-arrival', initialAmountPaise: amountPaise })}
                 onOpenReconcileFlow={catId => handleOpenReconcileCategory(catId)}
                 onOpenMoveFundsFlow={(fromId, toId, amt) => handleOpenMoveFunds(fromId, toId, amt)}
               />
@@ -361,17 +332,17 @@ function BudgetAppContent() {
         ) : (
           <>
             {activeTab === 'envelopes' && (
-              <div className="flex flex-col gap-5 animate-in fade-in pb-20">
+              <div className="flex flex-col gap-6 sm:gap-5 animate-in fade-in pb-28 sm:pb-20">
                 {/* Top Aggregate Summary Cards (§4.6: 2 clean cards) */}
-                <div id="top-summary-cards" className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                <div id="top-summary-cards" className="grid grid-cols-5 sm:grid-cols-2 gap-2 sm:gap-3">
                   {/* Card 1: Total In Envelopes */}
-                  <div className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col justify-between">
-                    <div>
-                      <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1 sm:gap-1.5">
-                        <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4E785E]" />
-                        Total Available
+                  <div className="col-span-4 sm:col-span-1 p-3 sm:p-4 rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs flex flex-col justify-between min-w-0">
+                    <div className="min-w-0">
+                      <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1 sm:gap-1.5 min-w-0">
+                        <Wallet className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4E785E] shrink-0" />
+                        <span className="truncate">Total Available ({activeEnvelopeCount} envelopes)</span>
                       </span>
-                      <div className="text-xl sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#1F1B16] dark:text-[#EDE8E1]">
+                      <div className="text-lg sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#1F1B16] dark:text-[#EDE8E1] truncate">
                         {formatPaise(totalAvailablePaise)}
                       </div>
                       {/* Amount in words for total in small fonts */}
@@ -379,26 +350,23 @@ function BudgetAppContent() {
                         {paiseToWords(totalAvailablePaise)}
                       </p>
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-2 truncate">
-                      Across {categories.filter(c => !c.deleted_at && !c.is_archived).length} envelopes
-                    </div>
                   </div>
 
                   {/* Card 2: Pending Card Debt (Spend -> Salary transfer) */}
                   <div
                     onClick={() => handleOpenReconcileCategory()}
                     id="pending-card-summary-card"
-                    className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl border transition-all cursor-pointer shadow-xs flex flex-col justify-between ${
+                    className={`col-span-1 p-2 sm:p-4 rounded-2xl border transition-all cursor-pointer shadow-xs flex flex-col items-center sm:items-stretch justify-center sm:justify-between gap-1 sm:gap-3 min-w-0 ${
                       totalPendingPaybackPaise > 0
                         ? 'bg-[#F9ECE8]/80 dark:bg-[#331D16]/80 border-[#E8C5BC] dark:border-[#5E261B] hover:border-[#B85D43]'
                         : 'bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border-[#E8E3DA] dark:border-[#2D2823]'
                     }`}
                   >
-                    <div>
-                      <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center justify-between">
-                        <span className="flex items-center gap-1 sm:gap-1.5 text-[#87341D] dark:text-[#F3B3A2]">
-                          <RefreshCw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                          Pending Payback
+                    <div className="min-w-0 w-full text-center sm:text-left">
+                      <span className="text-[9px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] flex items-center justify-center sm:justify-between">
+                        <span className="flex items-center justify-center gap-0 sm:gap-1.5 text-[#87341D] dark:text-[#F3B3A2] min-w-0">
+                          <RefreshCw className="w-3.5 h-3.5 sm:w-3.5 sm:h-3.5 shrink-0" />
+                          <span className="sr-only sm:not-sr-only sm:truncate">Pending Payback</span>
                         </span>
                         {totalPendingPaybackPaise > 0 && (
                           <span className="text-[9px] sm:text-[10px] text-[#87341D] font-bold hidden sm:flex items-center gap-0.5">
@@ -406,23 +374,23 @@ function BudgetAppContent() {
                           </span>
                         )}
                       </span>
-                      <div className="text-xl sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#87341D] dark:text-[#F3B3A2]">
+                      <div className="text-[11px] sm:text-2xl lg:text-3xl font-amount font-semibold mt-0.5 sm:mt-1 tracking-tight text-[#87341D] dark:text-[#F3B3A2] truncate">
                         {formatPaise(totalPendingPaybackPaise)}
                       </div>
                       {totalPendingPaybackPaise > 0 && (
-                        <p className="text-[10px] sm:text-[11px] text-[#87341D]/80 dark:text-[#F3B3A2]/80 mt-0.5 leading-snug line-clamp-1 italic">
+                        <p className="hidden sm:block text-[11px] text-[#87341D]/80 dark:text-[#F3B3A2]/80 mt-1 leading-snug line-clamp-1 italic">
                           {paiseToWords(totalPendingPaybackPaise)}
                         </p>
                       )}
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-2 flex items-center justify-between truncate">
+                    <div className="hidden sm:flex text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-3 items-center justify-between gap-2 shrink-0 truncate">
                       <span className="truncate">
                         {totalPendingPaybackPaise > 0
                           ? 'Move to Salary'
                           : 'Settled'}
                       </span>
                       {totalPendingPaybackPaise === 0 && (
-                        <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#4E785E]" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-[#4E785E]" />
                       )}
                     </div>
                   </div>
@@ -435,59 +403,65 @@ function BudgetAppContent() {
 
                 {/* Envelope Grid (§4.6: Available Now + Month Slice) */}
                 <div id="envelopes-section">
-                  <div className="flex items-center justify-between mb-3 px-1">
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
-                        Envelopes
-                      </h3>
-                      <button
-                        onClick={() => {
-                          setActiveTab('categories');
-                          setCurrentScreen(null);
-                        }}
-                        id="manage-envelopes-gear-btn"
-                        title="Manage Envelopes"
-                        className="p-1 rounded-md text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] transition-colors cursor-pointer"
-                      >
-                        <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Date Changer directly to the left of Add Money */}
-                      <div className="flex items-center gap-0.5 bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 px-1 py-0.5 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] shrink-0 shadow-2xs">
+                  <div className="flex flex-col gap-3 mb-4 px-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div>
+                          <h3 className="text-base sm:text-sm font-semibold text-[#1F1B16] dark:text-[#EDE8E1] leading-tight">
+                            Envelopes
+                          </h3>
+                          <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
+                            Available now
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setActiveTab('categories');
+                            setCurrentScreen(null);
+                          }}
+                          id="manage-envelopes-gear-btn"
+                          title="Manage Envelopes"
+                          className="h-9 w-9 sm:h-7 sm:w-7 rounded-lg text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] transition-colors cursor-pointer flex items-center justify-center"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Date Changer lives on the right side of the envelope heading row */}
+                      <div className="flex items-center overflow-hidden bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] shrink-0 shadow-2xs">
                         <button
                           onClick={handlePrevMonth}
                           id="prev-month-btn"
-                          className="p-1 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] rounded transition-colors cursor-pointer"
+                          className="h-9 min-h-9 w-10 min-w-10 sm:h-7 sm:min-h-7 sm:w-8 sm:min-w-8 p-0 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] transition-colors cursor-pointer grid place-items-center"
                           title="Previous Month"
                         >
-                          <ChevronLeft className="w-3.5 h-3.5" />
+                          <ChevronLeft className="block w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
                         </button>
-                        <span className="text-[11px] sm:text-xs font-semibold px-1 min-w-[76px] sm:min-w-[88px] text-center text-[#1F1B16] dark:text-[#EDE8E1] select-none">
+                        <span className="text-xs sm:text-xs font-semibold px-1 min-w-[78px] sm:min-w-[84px] text-center text-[#1F1B16] dark:text-[#EDE8E1] select-none">
                           {formattedMonth}
                         </span>
                         <button
                           onClick={handleNextMonth}
                           id="next-month-btn"
-                          className="p-1 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] rounded transition-colors cursor-pointer"
+                          className="h-9 min-h-9 w-10 min-w-10 sm:h-7 sm:min-h-7 sm:w-8 sm:min-w-8 p-0 text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] transition-colors cursor-pointer grid place-items-center"
                           title="Next Month"
                         >
-                          <ChevronRight className="w-3.5 h-3.5" />
+                          <ChevronRight className="block w-5 h-5 sm:w-4 sm:h-4 shrink-0" />
                         </button>
                       </div>
-
-                      <button
-                        onClick={() => handleOpenAddFunds()}
-                        id="envelopes-add-money-btn"
-                        className="px-2.5 py-1 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5 text-[#2C523B]" />
-                        <span>Add Money</span>
-                      </button>
                     </div>
+
+                    <button
+                      onClick={() => handleOpenAddFunds()}
+                      id="envelopes-add-money-btn"
+                      className="w-full sm:w-auto sm:self-end min-h-11 sm:min-h-0 px-4 sm:px-2.5 py-2.5 sm:py-1 rounded-xl sm:rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-sm sm:text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                    >
+                      <PlusCircle className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#2C523B]" />
+                      <span>Add Money</span>
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-2.5">
                     {categoryBalances.map(item => (
                       <CategoryCard
                         key={item.category.id}
@@ -545,6 +519,8 @@ function BudgetAppContent() {
                   setCurrentScreen(null);
                 }}
                 onOpenProfileModal={() => setCurrentScreen({ type: 'profile', isOnboarding: false })}
+                onInstallPwa={triggerInstall}
+                isPwaInstalled={isInstalled}
                 onOpenTour={handleOpenTourSafely}
               />
             )}
@@ -556,14 +532,10 @@ function BudgetAppContent() {
                   setActiveTab('envelopes');
                   setCurrentScreen(null);
                 }}
-                onNavigateToInvite={() => {
-                  setActiveTab('invite');
-                  setCurrentScreen(null);
-                }}
               />
             )}
 
-            {/* Tab 6: Household Sharing & Invite Screen */}
+            {/* Tab 6: Members & Household Requests Screen */}
             {activeTab === 'invite' && (
               <HouseholdInviteScreen
                 onBack={() => {
@@ -595,7 +567,7 @@ function BudgetAppContent() {
 
       {/* Progressive Web App Install Modal */}
       <InstallAppModal
-        isOpen={isInstallModalOpen || showInstallGuide}
+        isOpen={!isInstalled && (isInstallModalOpen || showInstallGuide)}
         onClose={() => {
           setIsInstallModalOpen(false);
           closeInstallGuide();
@@ -610,9 +582,10 @@ function BudgetAppContent() {
         onClose={() => setIsTourOpen(false)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        isFirstTime={!isFirstTimeIntroCompleted}
+        isFirstTime={user ? !(userIntroCompleted || isFirstTimeIntroCompleted) : !isFirstTimeIntroCompleted}
         onCompleteFirstTime={async () => {
-          await resetLedgerToZero(true);
+          localStorage.setItem('env_budget_first_time_intro_done', 'true');
+          await markUserIntroCompleted();
         }}
       />
     </div>

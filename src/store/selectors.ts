@@ -5,7 +5,17 @@ import {
   calculateMonthSummary,
   calculateCategoryPendingDebt,
 } from '../utils/budgetLogic';
-import { CategoryBalanceInfo } from '../types';
+import { CategoryBalanceInfo, Membership } from '../types';
+
+const FALLBACK_ACTIVE_MEMBER: Membership = {
+  id: 'mem_fallback',
+  household_id: 'local',
+  user_id: 'usr_me',
+  name: 'You',
+  role: 'owner',
+  avatar_color: '#4E785E',
+  joined_at: '2026-08-01T00:00:00Z',
+};
 
 export const selectLedger = (state: RootState) => state.ledger;
 
@@ -18,7 +28,6 @@ export const selectTransactions = createSelector(selectLedger, l => l.transactio
 export const selectReconciliations = createSelector(selectLedger, l => l.reconciliations);
 export const selectReconciliationLines = createSelector(selectLedger, l => l.reconciliationLines);
 export const selectEnvelopeTransfers = createSelector(selectLedger, l => l.envelopeTransfers);
-export const selectInvites = createSelector(selectLedger, l => l.invites);
 export const selectSelectedMonth = createSelector(selectLedger, l => l.selectedMonth);
 export const selectActiveMemberId = createSelector(selectLedger, l => l.activeMemberId);
 export const selectPushSettings = createSelector(selectLedger, l => l.pushSettings);
@@ -32,9 +41,10 @@ export const selectFirstTimeIntroCompleted = createSelector(
 );
 
 export const selectActiveMember = createSelector(
-  [selectMembers, selectActiveMemberId],
-  (members, activeId) => {
-    return members.find(m => m.user_id === activeId) || members[0];
+  [selectMembers, selectActiveMemberId, selectHouseholdId],
+  (members, activeId, householdId) => {
+    const activeMember = members.find(m => m.user_id === activeId) || members[0];
+    return activeMember || { ...FALLBACK_ACTIVE_MEMBER, household_id: householdId };
   }
 );
 

@@ -9,7 +9,6 @@ import {
   Sparkles,
   Trash2,
   Shield,
-  Copy,
   ExternalLink,
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
@@ -42,15 +41,14 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
     if (onBack) onBack();
     else if (onClose) onClose();
   };
-  const { members, activeMember, updateMemberProfile, setActiveMemberId, householdId } = useBudget();
-  const { user } = useAuth();
+  const { members, activeMember, updateMemberProfile, setActiveMemberId } = useBudget();
+  const { user, markUserProfileCompleted } = useAuth();
 
   const [name, setName] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
   const [avatarColor, setAvatarColor] = useState<string>('#4E785E');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
-  const [copiedHh, setCopiedHh] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -108,7 +106,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (e?: React.FormEvent) => {
+  const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const finalName = name.trim() || (activeMember?.name && activeMember.name !== 'You' ? activeMember.name : '') || 'You';
     const targetUserId = selectedMemberId || activeMember?.user_id;
@@ -124,16 +122,11 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
 
     localStorage.setItem('env_budget_profile_completed', 'true');
     localStorage.setItem('env_budget_user_name', finalName);
+    await markUserProfileCompleted();
     setSavedSuccess(true);
     setTimeout(() => {
       handleBack();
     }, 450);
-  };
-
-  const handleCopyHousehold = () => {
-    navigator.clipboard.writeText(householdId);
-    setCopiedHh(true);
-    setTimeout(() => setCopiedHh(false), 2000);
   };
 
   if (!isOpen) return null;
@@ -146,7 +139,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-profile-screen-btn"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
           <span>Back</span>
@@ -167,14 +160,14 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
           <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
             {isOnboarding
               ? 'Tell your household members what name and color to show when you log spending'
-              : 'Customize your avatar, display name, and household identification'}
+              : 'Customize your avatar and display name for shared activity'}
           </p>
         </div>
 
         <div className="p-5 sm:p-7">
           <form onSubmit={handleSave} className="space-y-4 text-xs">
           {/* Photo / Avatar Section */}
-          <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3.5 p-3 rounded-2xl bg-[#EFEAE1]/50 dark:bg-[#28221D]/50 border border-[#E8E3DA] dark:border-[#2D2823]">
             <div className="relative shrink-0">
               {avatarUrl ? (
                 <img
@@ -341,16 +334,8 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
           </div>
 
           {/* Household Context */}
-          <div className="pt-2 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60 flex items-center justify-between text-[11px] text-[#78716C] dark:text-[#A8A29E]">
-            <span className="truncate">Household ID: <strong className="font-mono">{householdId}</strong></span>
-            <button
-              type="button"
-              onClick={handleCopyHousehold}
-              className="flex items-center gap-1 text-[#486B88] font-medium hover:underline cursor-pointer"
-            >
-              {copiedHh ? <Check className="w-3 h-3 text-[#4E785E]" /> : <Copy className="w-3 h-3" />}
-              <span>{copiedHh ? 'Copied' : 'Copy'}</span>
-            </button>
+          <div className="pt-2 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60 text-[11px] text-[#78716C] dark:text-[#A8A29E]">
+            <span>Your profile is used to label transactions and shared household activity.</span>
           </div>
 
           {/* Action Buttons */}

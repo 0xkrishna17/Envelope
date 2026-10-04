@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { PaymentMethod } from '../types';
 import { rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
+import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import {
   ArrowLeft,
   Calendar,
@@ -52,7 +53,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('other');
   const [note, setNote] = useState<string>('');
   const [showNoteField, setShowNoteField] = useState<boolean>(false);
-  const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => getTodayDateInputValue());
   const [isRefund, setIsRefund] = useState<boolean>(false);
 
   const amountInputRef = useRef<HTMLInputElement>(null);
@@ -98,7 +99,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
         setShowNoteField(false);
         setIsRefund(false);
       }
-      setDate(new Date().toISOString().split('T')[0]);
+      setDate(getTodayDateInputValue());
 
       // Focus amount field instantly for <5 sec entry rule
       setTimeout(() => {
@@ -119,7 +120,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
     addTransaction({
       category_id: selectedCategoryId,
       amount: finalAmount,
-      date,
+      date: clampDateInputToToday(date),
       payment_method: paymentMethod,
       note: note.trim() || undefined,
     });
@@ -159,17 +160,17 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
       </div>
 
       <div className="bg-[#FAF7F2] dark:bg-[#1A1714] rounded-2xl border border-[#E8E3DA] dark:border-[#2D2823] shadow-xs overflow-hidden">
-        <form onSubmit={handleSubmit} className="p-5 sm:p-7 flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-7 flex flex-col gap-5 sm:gap-4">
           {/* Amount Input with Large Typographic Field */}
           <div className="relative">
-            <div className="flex items-center justify-between mb-1">
-              <label htmlFor="tx-amount-input" className="text-xs font-medium text-[#78716C] dark:text-[#A8A29E]">
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="tx-amount-input" className="text-sm sm:text-xs font-medium text-[#78716C] dark:text-[#A8A29E]">
                 Amount (₹ INR)
               </label>
               <button
                 type="button"
                 onClick={() => setIsRefund(!isRefund)}
-                className={`text-[11px] px-2 py-0.5 rounded transition-colors ${
+                className={`min-h-9 text-xs px-3 py-1.5 rounded-lg transition-colors ${
                   isRefund
                     ? 'bg-[#EBF2ED] text-[#2C523B] dark:bg-[#1E2E24] dark:text-[#A8D1B7] font-semibold'
                     : 'text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]'
@@ -179,7 +180,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
               </button>
             </div>
             <div className="relative flex items-center">
-              <span className="absolute left-3.5 text-2xl font-serif text-[#78716C] dark:text-[#A8A29E]">
+              <span className="absolute left-4 text-3xl sm:text-2xl font-serif text-[#78716C] dark:text-[#A8A29E]">
                 {isRefund ? '-₹' : '₹'}
               </span>
               <input
@@ -192,24 +193,24 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
                 value={amountStr}
                 onChange={e => setAmountStr(e.target.value)}
                 required
-                className="w-full pl-12 pr-4 py-3 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-3xl font-amount font-semibold text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-2 focus:ring-[#1F1B16] dark:focus:ring-[#EDE8E1]"
+                className="w-full pl-14 sm:pl-12 pr-4 py-4 sm:py-3 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-2xl sm:rounded-xl text-4xl sm:text-3xl font-amount font-semibold text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-2 focus:ring-[#1F1B16] dark:focus:ring-[#EDE8E1]"
               />
             </div>
           </div>
 
           {/* Category Picker: Icon Grid ordered by Most-Recently-Used (§4.2) */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-medium text-[#78716C] dark:text-[#A8A29E]">
+            <div className="flex items-center justify-between mb-2.5">
+              <label className="text-sm sm:text-xs font-medium text-[#78716C] dark:text-[#A8A29E]">
                 Envelope Category
               </label>
               {selectedCategory && (
-                <span className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
+                <span className="text-sm sm:text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
                   {selectedCategory.name}
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-72 sm:max-h-40 overflow-y-auto pr-1">
               {sortedCategories.map(cat => {
                 const isSelected = cat.id === selectedCategoryId;
                 return (
@@ -218,19 +219,19 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
                     type="button"
                     onClick={() => setSelectedCategoryId(cat.id)}
                     id={`cat-select-${cat.id}`}
-                    className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all ${
+                    className={`min-h-20 sm:min-h-0 flex flex-col items-center justify-center p-3 sm:p-2 rounded-2xl sm:rounded-xl border text-center transition-all ${
                       isSelected
                         ? 'border-[#1F1B16] dark:border-[#EDE8E1] bg-[#FAF7F2] dark:bg-[#1A1714] shadow-xs'
                         : 'border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
                     }`}
                   >
                     <div
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-white mb-1 shadow-xs"
+                      className="w-9 h-9 sm:w-7 sm:h-7 rounded-xl sm:rounded-lg flex items-center justify-center text-white mb-1.5 sm:mb-1 shadow-xs"
                       style={{ backgroundColor: cat.color }}
                     >
-                      {renderCategoryIcon(cat.icon, 'w-4 h-4')}
+                      {renderCategoryIcon(cat.icon, 'w-5 h-5 sm:w-4 sm:h-4')}
                     </div>
-                    <span className="text-[11px] font-medium leading-tight truncate w-full text-[#1F1B16] dark:text-[#EDE8E1]">
+                    <span className="text-sm sm:text-[11px] font-medium leading-tight truncate w-full text-[#1F1B16] dark:text-[#EDE8E1]">
                       {cat.name}
                     </span>
                   </button>
@@ -241,21 +242,21 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
 
           {/* Payment Method Segmented Pills (§4.2) */}
           <div>
-            <label className="text-xs font-medium text-[#78716C] dark:text-[#A8A29E] block mb-1.5">
+            <label className="text-sm sm:text-xs font-medium text-[#78716C] dark:text-[#A8A29E] block mb-2">
               Payment Method
             </label>
-            <div className="grid grid-cols-2 gap-1.5 bg-[#EFEAE1]/70 dark:bg-[#28221D]/70 p-1 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F]">
+            <div className="grid grid-cols-2 gap-2 bg-[#EFEAE1]/70 dark:bg-[#28221D]/70 p-1.5 sm:p-1 rounded-2xl sm:rounded-xl border border-[#DCD5C9] dark:border-[#3D362F]">
               <button
                 type="button"
                 onClick={() => setPaymentMethod('credit_card')}
                 id="method-credit-card"
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
+                className={`min-h-11 sm:min-h-0 flex items-center justify-center gap-1.5 py-2.5 sm:py-1.5 px-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-all ${
                   paymentMethod === 'credit_card'
                     ? 'bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] shadow-xs'
                     : 'text-[#78716C] dark:text-[#A8A29E]'
                 }`}
               >
-                <CreditCard className="w-3.5 h-3.5" />
+                <CreditCard className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 <span>Credit Card (Owed)</span>
               </button>
 
@@ -263,13 +264,13 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
                 type="button"
                 onClick={() => setPaymentMethod('secondary_account_debit')}
                 id="method-spend-debit"
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
+                className={`min-h-11 sm:min-h-0 flex items-center justify-center gap-1.5 py-2.5 sm:py-1.5 px-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-all ${
                   paymentMethod === 'secondary_account_debit'
                     ? 'bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] shadow-xs'
                     : 'text-[#78716C] dark:text-[#A8A29E]'
                 }`}
               >
-                <Landmark className="w-3.5 h-3.5" />
+                <Landmark className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 <span>Spend A/c</span>
               </button>
 
@@ -277,13 +278,13 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
                 type="button"
                 onClick={() => setPaymentMethod('cash')}
                 id="method-cash"
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
+                className={`min-h-11 sm:min-h-0 flex items-center justify-center gap-1.5 py-2.5 sm:py-1.5 px-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-all ${
                   paymentMethod === 'cash'
                     ? 'bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] shadow-xs'
                     : 'text-[#78716C] dark:text-[#A8A29E]'
                 }`}
               >
-                <Banknote className="w-3.5 h-3.5" />
+                <Banknote className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 <span>Cash</span>
               </button>
 
@@ -291,18 +292,18 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
                 type="button"
                 onClick={() => setPaymentMethod('other')}
                 id="method-other"
-                className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-medium transition-all ${
+                className={`min-h-11 sm:min-h-0 flex items-center justify-center gap-1.5 py-2.5 sm:py-1.5 px-2 rounded-xl sm:rounded-lg text-sm sm:text-xs font-medium transition-all ${
                   paymentMethod === 'other'
                     ? 'bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] shadow-xs'
                     : 'text-[#78716C] dark:text-[#A8A29E]'
                 }`}
               >
-                <HelpCircle className="w-3.5 h-3.5" />
+                <HelpCircle className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 <span>Other</span>
               </button>
             </div>
             {paymentMethod === 'credit_card' && (
-              <p className="text-[11px] text-[#AF7832] dark:text-[#E8C694] mt-1">
+              <p className="text-xs sm:text-[11px] text-[#AF7832] dark:text-[#E8C694] mt-2 sm:mt-1">
                 Will mark envelope debited now and card payback as pending.
               </p>
             )}
@@ -310,14 +311,15 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
 
           {/* Date and Optional Note */}
           <div className="flex items-center justify-between gap-3 pt-1">
-            <div className="flex items-center gap-2">
+            <div className="min-h-11 flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#78716C]" />
               <input
                 type="date"
                 value={date}
-                onChange={e => setDate(e.target.value)}
+                max={getTodayDateInputValue()}
+                onChange={e => setDate(clampDateInputToToday(e.target.value))}
                 id="tx-date-input"
-                className="bg-transparent text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1] border-b border-[#DCD5C9] dark:border-[#3D362F] pb-0.5 focus:outline-none"
+                className="bg-transparent text-sm sm:text-xs font-medium text-[#1F1B16] dark:text-[#EDE8E1] border-b border-[#DCD5C9] dark:border-[#3D362F] pb-1 focus:outline-none"
               />
             </div>
 
@@ -325,9 +327,9 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowNoteField(true)}
-                className="flex items-center gap-1 text-xs text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1]"
+                className="min-h-11 px-3 flex items-center gap-1.5 rounded-xl text-sm sm:text-xs text-[#78716C] hover:text-[#1F1B16] dark:hover:text-[#EDE8E1] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]"
               >
-                <MessageSquare className="w-3.5 h-3.5" />
+                <MessageSquare className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 <span>Add Note</span>
               </button>
             ) : null}
@@ -340,7 +342,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
               value={note}
               onChange={e => setNote(e.target.value)}
               id="tx-note-input"
-              className="w-full px-3 py-2 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-lg text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-1 focus:ring-[#1F1B16]"
+              className="w-full px-4 sm:px-3 py-3 sm:py-2 bg-[#EFEAE1]/60 dark:bg-[#28221D]/60 border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl sm:rounded-lg text-sm sm:text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-1 focus:ring-[#1F1B16]"
             />
           )}
 
@@ -349,9 +351,9 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
             type="submit"
             id="save-tx-btn"
             disabled={!amountStr || !selectedCategoryId}
-            className="w-full mt-2 py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-sm flex items-center justify-center gap-2 shadow-xs hover:opacity-95 disabled:opacity-40 transition-all cursor-pointer"
+            className="w-full mt-2 min-h-12 py-3 px-4 rounded-2xl sm:rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-semibold text-base sm:text-sm flex items-center justify-center gap-2 shadow-xs hover:opacity-95 disabled:opacity-40 transition-all cursor-pointer"
           >
-            <Check className="w-4 h-4" />
+            <Check className="w-5 h-5 sm:w-4 sm:h-4" />
             <span>Save to Envelope (Instant)</span>
           </button>
         </form>

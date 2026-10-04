@@ -25,13 +25,7 @@ interface VoiceInputModalProps {
   isOpen?: boolean;
   onClose?: () => void;
   onBack?: () => void;
-  onCommitAddTransaction: (params: {
-    amountPaise: number;
-    categoryId: string;
-    paymentMethod: any;
-    note?: string;
-  }) => void;
-  onOpenSalaryFlow: () => void;
+  onOpenSalaryFlow: (amountPaise?: number) => void;
   onOpenReconcileFlow: (categoryId?: string) => void;
   onOpenMoveFundsFlow?: (fromCatId?: string, toCatId?: string, amountPaise?: number) => void;
 }
@@ -40,7 +34,6 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
   isOpen = true,
   onClose,
   onBack,
-  onCommitAddTransaction,
   onOpenSalaryFlow,
   onOpenReconcileFlow,
   onOpenMoveFundsFlow,
@@ -49,7 +42,14 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
     if (onBack) onBack();
     else if (onClose) onClose();
   };
-  const { activeCategories, activeMember } = useBudget();
+  const {
+    activeCategories,
+    activeMember,
+    addTransaction,
+    reconcileCategoryCardSpend,
+    moveEnvelopeFunds,
+    addCategoryFunds,
+  } = useBudget();
   const { startApiCall } = useApiLoading();
 
   const [isListening, setIsListening] = useState<boolean>(false);
@@ -285,47 +285,74 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
     setIsLoading(false);
   };
 
+  const findCategoryByName = (name?: string) => {
+    const normalizedName = name?.trim().toLowerCase();
+    if (!normalizedName) return undefined;
+    return (
+      activeCategories.find(c => c.name.toLowerCase() === normalizedName) ||
+      activeCategories.find(c => c.name.toLowerCase().includes(normalizedName)) ||
+      activeCategories.find(c => normalizedName.includes(c.name.toLowerCase()))
+    );
+  };
+
   const handleConfirmIntent = () => {
     if (!parsedResult) return;
 
     if (parsedResult.intent === 'add_transaction') {
-      // Find matching category
-      const matchedCat =
-        activeCategories.find(
-          c =>
-            c.name.toLowerCase() === (parsedResult.categoryName || '').toLowerCase()
-        ) ||
-        activeCategories.find(
-          c =>
-            c.name.toLowerCase().includes((parsedResult.categoryName || '').toLowerCase())
-        ) ||
-        activeCategories[0];
+      const matchedCat = findCategoryByName(parsedResult.categoryName) || activeCategories[0];
+      if (!matchedCat || parsedResult.amountInPaise <= 0) return;
 
-      onCommitAddTransaction({
-        amountPaise: parsedResult.amountInPaise,
-        categoryId: matchedCat.id,
-        paymentMethod: parsedResult.paymentMethod || 'credit_card',
+      addTransaction({
+        category_id: matchedCat.id,
+        amount: parsedResult.amountInPaise,
+        date: new Date().toISOString().split('T')[0],
+        payment_method: parsedResult.paymentMethod || 'credit_card',
         note: parsedResult.note || transcript,
       });
       handleBack();
     } else if (parsedResult.intent === 'mark_salary_arrived') {
       handleBack();
-      onOpenSalaryFlow();
+      onOpenSalaryFlow(parsedResult.amountInPaise > 0 ? parsedResult.amountInPaise : undefined);
     } else if (parsedResult.intent === 'mark_reconciled') {
-      handleBack();
-      onOpenReconcileFlow();
-    } else if (parsedResult.intent === 'move_funds') {
-      const fromCat = activeCategories.find(c =>
-        c.name.toLowerCase().includes((parsedResult.fromCategoryName || '').toLowerCase())
-      );
-      const toCat = activeCategories.find(c =>
-        c.name.toLowerCase().includes((parsedResult.toCategoryName || '').toLowerCase())
-      );
-
-      handleBack();
-      if (onOpenMoveFundsFlow) {
-        onOpenMoveFundsFlow(fromCat?.id, toCat?.id, parsedResult.amountInPaise);
+      const matchedCat = findCategoryByName(parsedResult.categoryName);
+      if (matchedCat && parsedResult.amountInPaise > 0) {
+        reconcileCategoryCardSpend(matchedCat.id, parsedResult.amountInPaise, new Date().toISOString().split('T')[0]);
+        handleBack();
+      } else {
+        handleBack();
+        onOpenReconcileFlow(matchedCat?.id);
       }
+    } else if (parsedResult.intent === 'move_funds') {
+      const fromCat = findCategoryByName(parsedResult.fromCategoryName);
+      const toCat = findCategoryByName(parsedResult.toCategoryName);
+      if (fromCat && toCat && parsedResult.amountInPaise > 0) {
+        moveEnvelopeFunds({
+          fromCategoryId: fromCat.id,
+          toCategoryId: toCat.id,
+          amountPaise: parsedResult.amountInPaise,
+          note: parsedResult.note || transcript,
+        });
+        handleBack();
+      } else {
+        handleBack();
+        if (onOpenMoveFundsFlow) {
+          onOpenMoveFundsFlow(fromCat?.id, toCat?.id, parsedResult.amountInPaise);
+        }
+      }
+    } else if (parsedResult.intent === 'topup_category') {
+      const matchedCat = findCategoryByName(parsedResult.categoryName) || activeCategories[0];
+      if (!matchedCat || parsedResult.amountInPaise <= 0) return;
+
+      addCategoryFunds({
+        categoryId: matchedCat.id,
+        amountPaise: parsedResult.amountInPaise,
+        source: 'Voice Top-Up',
+        note: parsedResult.note || transcript,
+        depositHolding: 'secondary_account',
+        date: new Date().toISOString().split('T')[0],
+        loggedByUserId: activeMember.user_id,
+      });
+      handleBack();
     } else {
       // Query balance or other
       handleBack();
@@ -350,7 +377,7 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-voice-modal"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
           <span>Back</span>
@@ -408,7 +435,7 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
               }}
               placeholder="e.g. Spent 850 on fuel at Shell (press Enter to parse)..."
               id="voice-transcript-input"
-              className="w-full px-3 py-2.5 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-1 focus:ring-[#1F1B16]"
+              className="w-full min-h-24 sm:min-h-20 px-3 py-2.5 bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#DCD5C9] dark:border-[#3D362F] rounded-xl text-sm sm:text-xs text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-none focus:ring-1 focus:ring-[#1F1B16]"
             />
             {transcript && !isLoading && !parsedResult && (
               <div className="flex items-center gap-2 mt-2">
@@ -690,6 +717,31 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
                     <div>
                       <span className="text-[#78716C] block text-[10px]">To Envelope:</span>
                       <strong className="truncate block">{parsedResult.toCategoryName || 'Destination'}</strong>
+                    </div>
+                  </div>
+                )}
+
+                {parsedResult.intent === 'topup_category' && (
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-white/60 dark:bg-black/20 p-2.5 rounded-lg">
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Amount:</span>
+                      <strong className="font-amount font-semibold text-sm text-[#2C523B]">
+                        {formatPaise(parsedResult.amountInPaise)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Action:</span>
+                      <strong className="font-medium truncate block text-[#2C523B]">
+                        Direct Envelope Top-Up
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Envelope:</span>
+                      <strong className="truncate block">{parsedResult.categoryName || 'Envelope'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[#78716C] block text-[10px]">Source:</span>
+                      <strong className="truncate block">Voice Top-Up</strong>
                     </div>
                   </div>
                 )}

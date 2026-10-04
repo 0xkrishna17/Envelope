@@ -1,7 +1,8 @@
 import { Household, Membership, Category, SalaryEvent, Allocation, Transaction, Reconciliation, ReconciliationLine, EnvelopeTransfer } from '../types';
+import { DEFAULT_HOUSEHOLD_DOC_ID } from '../sync/householdIdentity';
 
 export const INITIAL_HOUSEHOLD: Household = {
-  id: 'hh_main',
+  id: DEFAULT_HOUSEHOLD_DOC_ID,
   name: 'Family Budget',
   created_by: 'usr_me',
   created_at: '2026-08-01T00:00:00Z',
@@ -11,7 +12,7 @@ export const INITIAL_HOUSEHOLD: Household = {
 export const INITIAL_MEMBERS: Membership[] = [
   {
     id: 'mem_1',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     user_id: 'usr_me',
     name: 'You',
     role: 'owner',
@@ -23,7 +24,7 @@ export const INITIAL_MEMBERS: Membership[] = [
 export const INITIAL_CATEGORIES: Category[] = [
   {
     id: 'cat_unallocated',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Unallocated',
     icon: 'Wallet',
     color: '#78716C', // Stone
@@ -34,7 +35,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'cat_groceries',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Groceries & Supplies',
     icon: 'ShoppingBag',
     color: '#4E785E', // Sage
@@ -45,7 +46,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'cat_dining',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Dining & Cafes',
     icon: 'UtensilsCrossed',
     color: '#B85D43', // Terracotta
@@ -56,7 +57,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'cat_bills',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Utilities & Bills',
     icon: 'Zap',
     color: '#486B88', // Dusty Blue
@@ -67,7 +68,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'cat_transport',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Fuel & Transport',
     icon: 'Car',
     color: '#AF7832', // Ochre
@@ -78,7 +79,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'cat_healthcare',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Healthcare & Meds',
     icon: 'HeartPulse',
     color: '#9E5460', // Clay
@@ -89,7 +90,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'cat_personal',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Personal & Fun',
     icon: 'Sparkles',
     color: '#6D5E8C', // Lavender
@@ -100,7 +101,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'cat_home',
-    household_id: 'hh_main',
+    household_id: DEFAULT_HOUSEHOLD_DOC_ID,
     name: 'Home & Repair',
     icon: 'Home',
     color: '#66734B', // Olive

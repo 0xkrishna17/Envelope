@@ -2,6 +2,23 @@
  * Date and Month Formatting Utilities for Envelope Budgeting
  */
 
+export function getTodayDateInputValue(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function isFutureDateInputValue(date: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && date > getTodayDateInputValue();
+}
+
+export function clampDateInputToToday(date: string | undefined | null): string {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return getTodayDateInputValue();
+  return isFutureDateInputValue(date) ? getTodayDateInputValue() : date;
+}
+
 export function parseYearMonth(yearMonth: string): { year: number; month: number } {
   if (!yearMonth) {
     const now = new Date();

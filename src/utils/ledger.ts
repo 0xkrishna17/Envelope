@@ -124,6 +124,12 @@ export function buildUnifiedLedger(
     const cat = categoryMap.get(tx.category_id);
     const member = memberMap.get(tx.logged_by_user_id);
 
+    const auditLabel = tx.ledger_entry_type === 'reversal'
+      ? `TID ${tx.id}${tx.related_transaction_id ? ` • offsets ${tx.related_transaction_id}` : ''}`
+      : tx.ledger_entry_type && tx.ledger_entry_type !== 'original'
+      ? `${tx.ledger_entry_type.replace(/_/g, ' ')} • TID ${tx.id}${tx.related_transaction_id ? ` • updates ${tx.related_transaction_id}` : ''}`
+      : `TID ${tx.id}`;
+
     allEntries.push({
       id: `tx_${tx.id}`,
       type: 'spend',
@@ -138,7 +144,7 @@ export function buildUnifiedLedger(
       loggedByName: member?.name || 'Household Member',
       loggedByAvatarColor: member?.avatar_color || '#78716C',
       title: tx.note || cat?.name || 'Expense',
-      subtitle: `${cat?.name || 'Envelope'} • ${tx.payment_method.replace(/_/g, ' ')}`,
+      subtitle: `${cat?.name || 'Envelope'} • ${tx.payment_method.replace(/_/g, ' ')} • ${auditLabel}`,
       note: tx.note,
       paymentMethod: tx.payment_method,
       reconciliationStatus: tx.reconciliation_status,
@@ -238,6 +244,8 @@ export function buildUnifiedLedger(
     const member = memberMap.get(alloc.logged_by_user_id || '');
     const entryDate = alloc.created_at.slice(0, 10);
 
+    const isReversal = alloc.source === 'Reversal';
+
     allEntries.push({
       id: `topup_${alloc.id}`,
       type: 'category_topup',
@@ -251,10 +259,10 @@ export function buildUnifiedLedger(
       loggedByUserId: alloc.logged_by_user_id || members[0]?.user_id || '',
       loggedByName: member?.name || 'Household Member',
       loggedByAvatarColor: member?.avatar_color || '#2C523B',
-      title: `Top-Up: ${cat?.name || 'Envelope'}`,
-      subtitle: `${alloc.source || 'Direct Deposit'} • ${alloc.transferred ? 'Available' : 'Pending Transfer'}`,
+      title: isReversal ? `Top-Up Offset: ${cat?.name || 'Envelope'}` : `Top-Up: ${cat?.name || 'Envelope'}`,
+      subtitle: isReversal ? `Offsets ${alloc.note?.replace('Reversal for top-up ', 'top-up ') || 'previous top-up'}` : `${alloc.source || 'Direct Deposit'}${alloc.transferred ? '' : ' • Pending transfer'}`,
       note: alloc.note,
-      topupSource: alloc.source || 'Manual Top-Up',
+      topupSource: isReversal ? 'Offset' : alloc.source || 'Manual Top-Up',
       depositHolding: alloc.deposit_holding,
       transferred: alloc.transferred,
       allocationId: alloc.id,
@@ -378,11 +386,13 @@ export function buildUnifiedLedger(
     }
   }
 
-  // Sort descending: Date first, then timestamp
+  // Sort reverse chronological: date first, then exact timestamp, then ID for deterministic audit ordering.
   filteredEntries.sort((a, b) => {
     const dateComp = b.date.localeCompare(a.date);
     if (dateComp !== 0) return dateComp;
-    return b.timestamp.localeCompare(a.timestamp);
+    const timestampComp = b.timestamp.localeCompare(a.timestamp);
+    if (timestampComp !== 0) return timestampComp;
+    return b.id.localeCompare(a.id);
   });
 
   return {
