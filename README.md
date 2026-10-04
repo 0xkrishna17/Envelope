@@ -22,19 +22,20 @@ A warm, family-friendly envelope-budgeting web app for planning monthly money, t
 - 🔥 Firebase / Firestore
 - 🧪 Vitest
 - 🎨 Tailwind CSS v4 utilities
+- 🐰 Bun for dependency management and scripts
 
 ## 🚀 Getting started
 
 ### 1. Install dependencies
 
 ```bash
-npm install
+bun install
 ```
 
 ### 2. Run locally
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 The Express server starts the app with Vite middleware. By default it runs on:
@@ -46,13 +47,13 @@ http://localhost:3000
 ### 3. Build for production
 
 ```bash
-npm run build
+bun run build
 ```
 
 ### 4. Start the production server
 
 ```bash
-npm run start
+bun run start
 ```
 
 ## 🧪 Quality checks
@@ -60,13 +61,13 @@ npm run start
 Run the test suite:
 
 ```bash
-npm run test
+bun run test
 ```
 
 Run TypeScript checks:
 
 ```bash
-npm run lint
+bun run lint
 ```
 
 ## 🌐 Netlify build
@@ -74,7 +75,7 @@ npm run lint
 For Netlify frontend deployment:
 
 ```bash
-npm run build:netlify
+bun run build:netlify
 ```
 
 Netlify Functions live in `netlify/functions/`, and API redirects are configured in `netlify.toml`.
