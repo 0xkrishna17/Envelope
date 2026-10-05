@@ -12,7 +12,7 @@ service cloud.firestore {
     }
 
     function isReservedHouseholdId(householdId) {
-      return householdId == 'local' || householdId == 'hh_family_ledger_main';
+      return householdId == 'local';
     }
 
     function householdDoc(householdId) {
@@ -44,15 +44,52 @@ service cloud.firestore {
       );
     }
 
-    function isMemberForData(data) {
+    function userProfileExists() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userProfileAfterExists() {
+      return signedIn()
+        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function currentSharedLedgerId() {
+      return userProfileExists()
+        && 'sharedLedgerId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.sharedLedgerId
+        : null;
+    }
+
+    function nextSharedLedgerId() {
+      return userProfileAfterExists()
+        && 'sharedLedgerId' in getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        ? getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.sharedLedgerId
+        : null;
+    }
+
+    function isMemberForData(data, householdId) {
       return signedIn()
         && 'member_uids' in data
         && data.member_uids is list
-        && request.auth.uid in data.member_uids;
+        && request.auth.uid in data.member_uids
+        && currentSharedLedgerId() == householdId;
     }
 
-    function isAuthorizedForData(data) {
-      return isOwnerForData(data) || isMemberForData(data) || isAllowedEmailForData(data);
+    function isMemberForDataAfter(data, householdId) {
+      return signedIn()
+        && 'member_uids' in data
+        && data.member_uids is list
+        && request.auth.uid in data.member_uids
+        && nextSharedLedgerId() == householdId;
+    }
+
+    function isAuthorizedForData(data, householdId) {
+      return isOwnerForData(data) || isMemberForData(data, householdId) || isAllowedEmailForData(data);
+    }
+
+    function isAuthorizedForDataAfter(data, householdId) {
+      return isOwnerForData(data) || isMemberForDataAfter(data, householdId) || isAllowedEmailForData(data);
     }
 
     function householdDocAfter(householdId) {
@@ -63,13 +100,13 @@ service cloud.firestore {
       return signedIn()
         && !isReservedHouseholdId(householdId)
         && exists(/databases/$(database)/documents/households/$(householdId))
-        && isAuthorizedForData(householdDoc(householdId).data);
+        && isAuthorizedForData(householdDoc(householdId).data, householdId);
     }
 
     function isAuthorizedForHouseholdAfter(householdId) {
       return signedIn()
         && !isReservedHouseholdId(householdId)
-        && isAuthorizedForData(householdDocAfter(householdId).data);
+        && isAuthorizedForDataAfter(householdDocAfter(householdId).data, householdId);
     }
 
     function isCreatingOwnHousehold(householdId) {
@@ -102,36 +139,6 @@ service cloud.firestore {
         && request.resource.data.member_uids == resource.data.member_uids;
     }
 
-    function isKnownLedgerSubcollection(subcollection) {
-      return subcollection in [
-        'members',
-        'categories',
-        'salaryEvents',
-        'allocations',
-        'transactions',
-        'reconciliations',
-        'reconciliationLines',
-        'envelopeTransfers'
-      ];
-    }
-
-    function subcollectionDocMatchesHouseholdPath(householdId) {
-      return !('household_id' in request.resource.data)
-        || request.resource.data.household_id == householdId;
-    }
-
-    function existingSubcollectionDocMatchesHouseholdPath(householdId) {
-      return !('household_id' in resource.data)
-        || resource.data.household_id == householdId;
-    }
-
-    function memberSoftDeletesOwnMemberDoc(householdId, subcollection) {
-      return subcollection == 'members'
-        && isMemberForData(householdDoc(householdId).data)
-        && !isOwnerForData(householdDoc(householdId).data)
-        && resource.data.user_id == request.auth.uid
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['deleted_at']);
-    }
 
     function inviteImmutableFieldsUnchanged() {
       return request.resource.data.household_id == resource.data.household_id
@@ -182,13 +189,14 @@ service cloud.firestore {
         && request.resource.data.member_uids.size() == resource.data.member_uids.size() + 1
         && request.resource.data.allowed_emails.size() == resource.data.allowed_emails.size() + 1
         && request.auth.uid in request.resource.data.member_uids
-        && authEmail() in request.resource.data.allowed_emails;
+        && authEmail() in request.resource.data.allowed_emails
+        && nextSharedLedgerId() == householdId;
     }
 
-    function memberRemovesOnlySelfFromHousehold() {
+    function memberRemovesOnlySelfFromHousehold(householdId) {
       return signedIn()
         && authEmail() != ''
-        && isMemberForData(resource.data)
+        && isMemberForData(resource.data, householdId)
         && !isOwnerForData(resource.data)
         && ownerFieldsUnchanged()
         && request.resource.data.diff(resource.data).changedKeys().hasOnly(['allowed_emails', 'member_uids', 'updated_at', 'updated_by_uid'])
@@ -201,7 +209,8 @@ service cloud.firestore {
         && request.resource.data.member_uids.size() == resource.data.member_uids.size() - 1
         && request.resource.data.allowed_emails.size() == resource.data.allowed_emails.size() - 1
         && !(request.auth.uid in request.resource.data.member_uids)
-        && !(authEmail() in request.resource.data.allowed_emails);
+        && !(authEmail() in request.resource.data.allowed_emails)
+        && nextSharedLedgerId() != householdId;
     }
 
     function profileLedgerAllowed(ledgerId) {
@@ -209,18 +218,37 @@ service cloud.firestore {
         || (
           !isReservedHouseholdId(ledgerId)
           && existsAfter(/databases/$(database)/documents/households/$(ledgerId))
-          && isAuthorizedForData(getAfter(/databases/$(database)/documents/households/$(ledgerId)).data)
+          && isAuthorizedForDataAfter(getAfter(/databases/$(database)/documents/households/$(ledgerId)).data, ledgerId)
+        );
+    }
+
+    function sharedLedgerFieldAllowed() {
+      return !('sharedLedgerId' in request.resource.data)
+        || request.resource.data.sharedLedgerId == null
+        || (
+          request.resource.data.sharedLedgerId is string
+          && request.resource.data.sharedLedgerId != request.resource.data.privateLedgerId
+          && profileLedgerAllowed(request.resource.data.sharedLedgerId)
+        );
+    }
+
+    function activeLedgerFieldAllowed() {
+      return profileLedgerAllowed(request.resource.data.activeLedgerId)
+        || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && request.resource.data.activeLedgerId == resource.data.privateLedgerId
         );
     }
 
     function userProfileLedgerIdsAllowed() {
       return profileLedgerAllowed(request.resource.data.privateLedgerId)
+        && sharedLedgerFieldAllowed()
+        && activeLedgerFieldAllowed()
         && (
-          profileLedgerAllowed(request.resource.data.activeLedgerId) ||
-          (
-            exists(/databases/$(database)/documents/users/$(request.auth.uid))
-            && request.resource.data.activeLedgerId == resource.data.privateLedgerId
-          )
+          !('sharedLedgerId' in request.resource.data)
+          || request.resource.data.sharedLedgerId == null
+          || request.resource.data.activeLedgerId == request.resource.data.sharedLedgerId
+          || request.resource.data.activeLedgerId == request.resource.data.privateLedgerId
         );
     }
 
@@ -228,37 +256,31 @@ service cloud.firestore {
       allow create: if isCreatingOwnHousehold(householdId);
       allow read: if signedIn()
         && !isReservedHouseholdId(householdId)
-        && isAuthorizedForData(resource.data);
+        && isAuthorizedForData(resource.data, householdId);
       allow update: if signedIn()
         && !isReservedHouseholdId(householdId)
         && ownerFieldsUnchanged()
         && (
           isOwnerForData(resource.data) ||
-          (isMemberForData(resource.data) && aclUnchanged()) ||
+          (isMemberForData(resource.data, householdId) && aclUnchanged()) ||
           inviteeAddsOnlySelfToHousehold(householdId) ||
-          memberRemovesOnlySelfFromHousehold()
+          memberRemovesOnlySelfFromHousehold(householdId)
         );
       allow delete: if signedIn()
         && !isReservedHouseholdId(householdId)
         && isOwnerForData(resource.data);
 
-      match /{subcollection}/{documentId} {
-        allow read: if isKnownLedgerSubcollection(subcollection)
-          && isAuthorizedForHousehold(householdId);
-        allow create: if isKnownLedgerSubcollection(subcollection)
-          && isAuthorizedForHouseholdAfter(householdId)
-          && subcollectionDocMatchesHouseholdPath(householdId);
-        allow update: if isKnownLedgerSubcollection(subcollection)
-          && (
-            (
-              isAuthorizedForHouseholdAfter(householdId)
-              && subcollectionDocMatchesHouseholdPath(householdId)
-            ) || memberSoftDeletesOwnMemberDoc(householdId, subcollection)
-          );
-        allow delete: if isKnownLedgerSubcollection(subcollection)
-          && isAuthorizedForHousehold(householdId)
-          && existingSubcollectionDocMatchesHouseholdPath(householdId);
+      match /events/{eventId} {
+        allow read: if isAuthorizedForHousehold(householdId);
+        allow create: if isAuthorizedForHouseholdAfter(householdId)
+          && request.resource.data.id == eventId
+          && request.resource.data.household_id == householdId
+          && request.resource.data.actor_uid == request.auth.uid;
+        allow update: if isAuthorizedForHousehold(householdId)
+          && request.resource.data == resource.data;
+        allow delete: if false;
       }
+
     }
 
     match /householdInvitations/{invitationId} {

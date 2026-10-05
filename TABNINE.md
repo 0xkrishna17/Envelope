@@ -1,5 +1,23 @@
 # Envelope Project Instructions
 
+## General instructions
+
+You are not my assistant. You are my advisor who happens to be smarter than me. Follow these rules in every reply:
+
+1. Never start with agreement. Your first sentence must challenge my assumption, point out what I'm missing, or ask a question that exposes a gap in my thinking.
+
+2. Rate your confidence. Before any claim, tag it [Certain] if you have hard evidence, [Likely] if it's a strong inference, [Guessing] if you are filling gaps. If most of your reply is guessing, say so first.
+
+3. Kill these phrases for good: "Great question", "You're absolutely right", "That makes a lot of sense", "Absolutely", "Definitely". If you catch yourself typing one, delete and rewrite.
+
+4. Disagree with structure. When I'm wrong, say: "I disagree because [reason]. Here's what I'd do instead [alternative]. The risk in your approach is [specific downside]."
+
+5. Give me the uncomfortable answer first. If there's a truth I probably don't want to hear, lead with it. First line, not buried in paragraph three.
+
+6. No warm-up paragraphs. Skip "There are several ways to look at this". Start with the most useful thing you can say.
+
+7. If I push back, don't fold. Hold your position. unless I give you genuinely new information. "But I really think❞ is not new information.
+
 ## Project Overview
 
 Envelope is a personal/family envelope-budgeting web app. It is a TypeScript React single-page application served through an Express server, with Redux Toolkit managing the budgeting ledger and Firebase/Firestore providing cloud sync and access control.
@@ -102,16 +120,16 @@ Removes generated build artifacts (`dist`, `server.js`).
 
 ## Architecture and State Management
 
-- Redux Toolkit is the source of truth for UI/domain ledger state. The store is configured in `src/store/index.ts` with a single `ledger` reducer and a sync middleware compatibility layer.
-- Sync-specific architecture lives under `src/sync/`: household identity helpers, typed sync results/state, Firestore subcollection paths/mappers, local cache helpers, mutation queue helpers, and the Firestore sync engine.
-- `BudgetContext` wraps Redux selectors/actions in a React-friendly API for the UI. Prefer extending existing Redux actions/selectors and exposing them through this context when adding domain behavior.
+- Redux Toolkit is the projected UI read model for ledger state; domain mutations are represented as immutable ledger events and then projected back into Redux.
+- Sync-specific architecture lives under `src/sync/`: household identity helpers, typed sync results/state, root household metadata helpers, invitation/access helpers, and the event-sourced sync runtime under `src/sync/events/`.
+- `BudgetContext` wraps Redux selectors/actions in a React-friendly API for the UI. Prefer adding event command builders and projector support when adding domain behavior.
 - Derived state belongs in selectors (`src/store/selectors.ts`) or pure utility functions (`src/utils/*`) rather than duplicated in components.
 - Ledger operations generally use soft deletion (`deleted_at`) instead of hard deletion so historical data and sync semantics remain stable.
 - Monetary amounts are represented as integer paise, not floating-point rupees. UI formatting should use the currency helpers in `src/utils/currency.ts`.
 - Dates are generally ISO strings or `YYYY-MM` strings for selected months. Preserve existing date formats and helper usage.
-- Credit-card transactions have reconciliation statuses (`pending`, `partially_reconciled`, `reconciled`, or `n/a`). Reconciliation logic is FIFO-based and lives in `src/utils/budgetLogic.ts` / ledger reducers.
+- Credit-card transactions have reconciliation statuses (`pending`, `partially_reconciled`, `reconciled`, or `n/a`). Reconciliation logic is FIFO-based and should be invoked by event command builders/projectors via utilities in `src/utils/budgetLogic.ts`.
 - Category balances are computed as transferred, non-deleted allocations minus non-deleted transactions. Reconciliation does not change envelope balance because spend is debited at transaction time.
-- Local storage hydration, Firestore snapshot subscription, and sync flushing are coordinated through `BudgetContext` and `syncMiddleware`.
+- Event-log hydration, Firestore event subscription, and cloud event push/pull are coordinated through `BudgetContext` and `src/sync/events/`.
 
 ## Frontend Conventions
 
@@ -171,10 +189,10 @@ Run focused Vitest files during development when useful, then run the broader su
 - Use integer paise for all calculations and convert only at UI/input boundaries.
 - For category/envelope changes, ensure unallocated surplus behavior remains consistent.
 - For credit-card changes, update reconciliation status and outstanding debt behavior together.
-- For cloud-sync-affecting changes, consider local storage hydration, Firestore snapshot handling, pending mutation queue persistence, sync result states, and permission-denied states.
-- Firestore cloud sync must remain Google-authenticated. Signed-out users may use local-only data, but Firestore reads/writes require Firebase Auth.
-- Sync must be triggered by domain mutations, manual sync, auth/connectivity/focus recovery, or Firestore realtime snapshots — never by mouse movement, keystrokes, scrolling, or generic activity listeners.
-- Existing signed-out/local ledger data must not auto-upload after sign-in; use the explicit import flow (`importLocalLedgerToCloud`) before enabling writes.
+- For cloud-sync-affecting changes, treat the immutable event log as the canonical source of truth; Redux is a projected read model.
+- Firestore cloud sync must remain Google-authenticated. Signed-out users may use local-only event data, but Firestore reads/writes require Firebase Auth.
+- Sync must be triggered by domain mutations, manual sync, auth/connectivity/focus recovery, or Firestore event subscriptions — never by mouse movement, keystrokes, scrolling, or generic activity listeners.
+- Existing signed-out/local ledger data must not auto-upload after sign-in. This project uses a clean-slate event sync model; if data needs to be reset, clear Firestore/root event data directly.
 - For access-control changes, preserve owner-managed lowercase Google email allowlists, canonical ACL metadata (`owner_uid`, `owner_email`, `allowed_emails`), and `AccessDeniedGate` flows.
 - Shared household links only select a target household; they never grant access without Google sign-in and allowlist authorization.
 - For voice parsing changes, preserve the local fallback path so the app remains functional without `GEMINI_API_KEY`.

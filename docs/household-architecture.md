@@ -1,14 +1,15 @@
 # Household Architecture
 
-Envelope uses Google Auth plus Firestore to keep each user's private ledger isolated while allowing explicit household sharing.
+Envelope uses Google Auth plus Firestore root metadata to keep private ledgers isolated and to support explicit household sharing.
 
 ## Core invariants
 
-- Every signed-in Google user has a private cloud ledger created automatically on first sign-in.
-- The active dashboard is selected from `/users/{uid}.activeLedgerId`; users do not choose ledger IDs from URLs or share links.
-- Household IDs are internal generated IDs and must never be exposed as join links.
-- Firestore rules are the security boundary. Client-side checks improve UX, but rules must reject reads/writes for unauthorized users even if someone tampers with local storage, URLs, or requests.
-- Reserved/local IDs such as `local` and `hh_family_ledger_main` are rejected for cloud access.
+- Every signed-in Google user has a private cloud household created automatically on first sign-in.
+- The active dashboard is selected from `/users/{uid}.activeLedgerId`.
+- Household IDs are internal generated IDs and are not join links.
+- Firestore rules are the security boundary. Client-side checks improve UX, but rules must reject unauthorized reads and writes.
+- The reserved local ID `local` is never a cloud household ID.
+- Ledger contents are represented by immutable events under the household event collection.
 
 ## Firestore model
 
@@ -39,14 +40,8 @@ Envelope uses Google Auth plus Firestore to keep each user's private ledger isol
   first_time_intro_completed
   first_time_intro_completed_at
 
-/households/{householdId}/members/{memberId}
-/households/{householdId}/categories/{categoryId}
-/households/{householdId}/salaryEvents/{salaryEventId}
-/households/{householdId}/allocations/{allocationId}
-/households/{householdId}/transactions/{transactionId}
-/households/{householdId}/reconciliations/{reconciliationId}
-/households/{householdId}/reconciliationLines/{lineId}
-/households/{householdId}/envelopeTransfers/{transferId}
+/households/{householdId}/events/{eventId}
+  immutable ledger event document
 
 /householdInvitations/{householdId}__{inviteeEmail}
   household_id
@@ -61,93 +56,67 @@ Envelope uses Google Auth plus Firestore to keep each user's private ledger isol
   responded_at
 ```
 
-Only the listed household subcollections are valid ledger data collections.
-
 ## Sign-in lifecycle
 
 1. User signs in with Google.
 2. App reads `/users/{uid}`.
 3. If `privateLedgerId` is missing, the app creates a generated private `/households/{householdId}` owned by that UID/email.
 4. If `activeLedgerId` is missing, it is set to `privateLedgerId`.
-5. Redux hydrates only from the cache scoped by `uid + activeLedgerId`, then Firestore becomes authoritative.
+5. The app loads household root metadata, subscribes to household events, and projects the event log into Redux.
 
 ## Invite lifecycle
 
 1. Household owner enters a Google email.
 2. App creates `/householdInvitations/{householdId}__{email}` with `status: pending`.
-3. No join link is generated.
-4. Invited user signs in with that exact Google email and sees the pending request.
-5. Declining changes only the invitation status; the invited user's private ledger remains active.
-6. Accepting requires an explicit warning because the active dashboard switches to the shared household.
-7. Accept writes one batch:
-   - add invitee email to `allowed_emails`
-   - add invitee UID to `member_uids`
-   - create/update `members/mem_{uid}`
-   - set `/users/{uid}.activeLedgerId` to the shared household
-   - mark invitation `accepted`
-
-The invited user's private ledger remains stored in `/users/{uid}.privateLedgerId`.
+3. Invited user signs in with that exact Google email and sees the pending request.
+4. Declining changes the invitation status; the invited user's private household remains active.
+5. Accepting confirms that the active dashboard will switch to the shared household.
+6. Accepting updates the household root access metadata, updates `/users/{uid}.activeLedgerId`, marks the invitation accepted, and records member/profile state through ledger events.
 
 ## Leave lifecycle
 
-A non-owner member can leave a shared household. Leaving writes one atomic batch:
+A non-owner member can leave a shared household. Leaving:
 
-- set `/users/{uid}.activeLedgerId` back to `/users/{uid}.privateLedgerId`
-- remove the member email from `allowed_emails`
-- remove the member UID from `member_uids`
-- soft-delete `members/mem_{uid}` with `deleted_at`
+- sets `/users/{uid}.activeLedgerId` back to `/users/{uid}.privateLedgerId`
+- removes the member email from `allowed_emails`
+- removes the member UID from `member_uids`
+- records member removal through ledger events
 
-After leaving, the user's private ledger becomes active again.
+The owner's household remains active for remaining authorized members.
 
 ## Owner revocation lifecycle
 
-Owners can revoke accepted member access by email. Revocation removes both access keys:
+Owners can revoke accepted member access by email. Revocation removes both access keys from the household root metadata:
 
-- remove email from `allowed_emails`
-- remove UID from `member_uids`
-- soft-delete the member document
+- `allowed_emails`
+- `member_uids`
 
-The owner cannot safely write another user's `/users/{uid}` profile under Firestore rules. Instead, if the removed user later opens the app and Firestore denies their old shared `activeLedgerId`, the client falls back to their own `privateLedgerId`.
+The member removal is represented through ledger events. If a removed user later opens the app and Firestore denies their shared `activeLedgerId`, the client falls back to that user's private household.
 
-## Append-only ledger transactions
+## Event-sourced ledger behavior
 
-Transaction edits are stored as new ledger rows instead of mutating the original row.
+Domain behavior is represented by immutable ledger events and deterministic projection:
 
-- Every transaction row has a unique `id`/TID and is stored as `/households/{householdId}/transactions/{transactionId}` in Firestore.
-- Amount-only edits create an `adjustment` transaction with its own TID and `related_transaction_id` pointing to the original TID.
-- Category or payment-method edits create a `reversal` row for the original bucket and a `replacement` row for the new bucket.
-- Delete/revert actions create reversal rows instead of removing or soft-deleting the original row.
-- Direct top-up, envelope transfer, and reconciliation reverts also append offsetting entries rather than deleting history.
-- The original transaction row remains unchanged for audit history.
-- Ledger display is reverse chronological by transaction date, exact creation timestamp, then ID for deterministic ordering.
-- Credit-card pending debt folds `adjustment` and `reversal` rows into the related original transaction so reconciliation remains correct.
-- Replaying ledger entries in chronological order should reconstruct balances at each point in time.
+- Transaction edits append adjustment/reversal/replacement events.
+- Delete/revert actions append offsetting events.
+- Direct top-up, envelope transfer, and reconciliation reversals append offsetting events.
+- Salary arrival appends salary and allocation events.
+- Reset appends a reset boundary event and projects a post-reset read model.
+- The current dashboard is always the projection of the scoped event log.
 
-## Reset lifecycle
+## Event logs
 
-Reset is owner-only for shared cloud households. Local/private owners can reset their own ledger.
-
-Reset behavior:
-
-- clears transactional data in Redux
-- keeps household owner/access metadata
-- writes the full current ledger snapshot to Firestore
-- deletes stale documents from known subcollections before writing current docs, so old transactions/allocations cannot reappear after reset
-
-Future rewind should build on this by writing owner-only snapshots before destructive actions and restoring from a selected snapshot with an explicit warning. The warning must say that restoring to a past point replaces the active ledger with that snapshot and loses all later ledger history from the active timeline.
-
-## Cache and pending mutations
-
-Authenticated cloud cache and pending mutation queues are scoped by both user UID and household ID. This prevents shared browsers or account switching from replaying stale data or queued writes across users.
-
-Anonymous/local-only data remains in the local ledger cache.
+- Authenticated cloud event logs are scoped by user UID and household ID.
+- Local-only event logs are scoped to the local household.
+- Duplicate events are ignored by event ID.
+- Realtime Firestore event subscriptions append unseen remote events and project the read model.
 
 ## Security checklist
 
 - Manual household IDs from URLs/local storage must not grant access.
 - Firestore rules must check owner UID, member UID, or owner email against the household root document.
 - Only generated cloud household IDs can be written to Firestore.
-- Rules must restrict subcollection access to the known ledger collections.
+- Event documents under `/households/{householdId}/events/{eventId}` are immutable.
 - Owner removal must revoke both `allowed_emails` and `member_uids`.
 - Members can leave only themselves; owners cannot leave their owned household.
 - Reset/rewind must remain owner-only for shared households.

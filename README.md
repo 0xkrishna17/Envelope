@@ -119,6 +119,7 @@ See also:
 
 - [`docs/cloud-sync-architecture.md`](docs/cloud-sync-architecture.md)
 - [`docs/household-architecture.md`](docs/household-architecture.md)
+- [`docs/event-sourced-sync-architecture.md`](docs/event-sourced-sync-architecture.md)
 
 ## 🧡 Development notes
 
