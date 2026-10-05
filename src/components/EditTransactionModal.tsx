@@ -4,6 +4,7 @@ import { Transaction, PaymentMethod } from '../types';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import { ArrowLeft, X, Trash2, Check, Lock, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface EditTransactionModalProps {
@@ -30,6 +31,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
     logCorrection,
     members,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   const [amountStr, setAmountStr] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -85,6 +87,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
     }
 
     handleBack();
+    feedback.transactionUpdated();
   };
 
   const handleDelete = () => {
@@ -95,6 +98,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
     if (window.confirm('Reverse this transaction? The original TID stays in history and a new reversal entry will offset its amount.')) {
       deleteTransaction(transaction.id);
       handleBack();
+      feedback.entryReversed();
     }
   };
 
@@ -105,6 +109,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
 
     logCorrection(transaction, diffPaise, correctionNote || `Correction for tx #${transaction.id.slice(-4)}`);
     handleBack();
+    feedback.correctionLogged();
   };
 
   return (

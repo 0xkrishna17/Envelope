@@ -39,7 +39,6 @@ export interface UnifiedLedgerEntry {
   // Actor / Logged by
   loggedByUserId: string;
   loggedByName: string;
-  loggedByAvatarColor: string;
 
   // Text representation
   title: string;
@@ -142,7 +141,6 @@ export function buildUnifiedLedger(
       categoryColor: cat?.color || '#78716C',
       loggedByUserId: tx.logged_by_user_id,
       loggedByName: member?.name || 'Household Member',
-      loggedByAvatarColor: member?.avatar_color || '#78716C',
       title: tx.note || cat?.name || 'Expense',
       subtitle: `${cat?.name || 'Envelope'} • ${tx.payment_method.replace(/_/g, ' ')} • ${auditLabel}`,
       note: tx.note,
@@ -164,7 +162,6 @@ export function buildUnifiedLedger(
       amountPaise: sal.amount,
       loggedByUserId: sal.earner_user_id,
       loggedByName: earner?.name || 'Earner',
-      loggedByAvatarColor: earner?.avatar_color || '#4E785E',
       title: `Salary Credit (${earner?.name || 'Primary'})`,
       subtitle: 'Deposited to Primary Salary Account',
       note: 'Monthly salary inflow received into household account',
@@ -191,7 +188,6 @@ export function buildUnifiedLedger(
       categoryColor: cat?.color || '#B85D43',
       loggedByUserId: rec.logged_by_user_id,
       loggedByName: member?.name || 'Household Member',
-      loggedByAvatarColor: member?.avatar_color || '#B85D43',
       title: `Credit Card Payback (${cat?.name || 'Card'})`,
       subtitle: 'Spend A/c → Primary Salary A/c (CC Settle)',
       note: `Settled ${linesCount} card transaction${linesCount === 1 ? '' : 's'}`,
@@ -222,7 +218,6 @@ export function buildUnifiedLedger(
       toCategoryColor: toCat?.color || '#4E785E',
       loggedByUserId: tr.logged_by_user_id,
       loggedByName: member?.name || 'Household Member',
-      loggedByAvatarColor: member?.avatar_color || '#AF7832',
       title: `Envelope Transfer: ${fromCat?.name || 'From'} → ${toCat?.name || 'To'}`,
       subtitle: `${fromCat?.name || 'Envelope'} reallocated to ${toCat?.name || 'Envelope'}`,
       note: tr.note,
@@ -258,7 +253,6 @@ export function buildUnifiedLedger(
       categoryColor: cat?.color || '#2C523B',
       loggedByUserId: alloc.logged_by_user_id || members[0]?.user_id || '',
       loggedByName: member?.name || 'Household Member',
-      loggedByAvatarColor: member?.avatar_color || '#2C523B',
       title: isReversal ? `Top-Up Offset: ${cat?.name || 'Envelope'}` : `Top-Up: ${cat?.name || 'Envelope'}`,
       subtitle: isReversal ? `Offsets ${alloc.note?.replace('Reversal for top-up ', 'top-up ') || 'previous top-up'}` : `${alloc.source || 'Direct Deposit'}${alloc.transferred ? '' : ' • Pending transfer'}`,
       note: alloc.note,

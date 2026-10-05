@@ -19,7 +19,6 @@ describe('Unified Ledger Processing Unit Tests', () => {
       user_id: 'u_user1',
       name: 'Alex',
       role: 'owner',
-      avatar_color: '#4E785E',
       joined_at: '2026-08-01T00:00:00Z',
     },
     {
@@ -28,7 +27,6 @@ describe('Unified Ledger Processing Unit Tests', () => {
       user_id: 'u_user2',
       name: 'Sam',
       role: 'member',
-      avatar_color: '#B85D43',
       joined_at: '2026-08-01T00:00:00Z',
     },
   ];

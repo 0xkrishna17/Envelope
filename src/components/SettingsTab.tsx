@@ -6,6 +6,7 @@ import { HouseholdAccessManager } from './HouseholdAccessManager';
 import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen, Download, Smartphone } from 'lucide-react';
 import { ResetDataWarningModal } from './ResetDataWarningModal';
 import { getCloudSyncBadgeStatus } from '../utils/syncDisplay';
+import { getMemberDisplayName, getMemberInitial } from '../utils/memberDisplay';
 
 interface SettingsTabProps {
   onOpenInviteModal: () => void;
@@ -52,21 +53,19 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             {activeMember.avatar_url ? (
               <img
                 src={activeMember.avatar_url}
-                alt={activeMember.name}
+                alt={getMemberDisplayName(activeMember)}
                 referrerPolicy="no-referrer"
                 className="w-12 h-12 rounded-2xl object-cover border border-[#DCD5C9] dark:border-[#3D362F] shadow-xs"
               />
             ) : (
-              <div
-                style={{ backgroundColor: activeMember.avatar_color }}
-                className="w-12 h-12 rounded-2xl text-white flex items-center justify-center font-bold text-lg shadow-xs"
-              >
-                {activeMember.name.charAt(0)}
+              <div className="w-12 h-12 rounded-2xl bg-[#4E785E]/15 text-[#4E785E] dark:bg-[#A8D1B7]/15 dark:text-[#A8D1B7] flex items-center justify-center font-bold text-lg shadow-xs">
+
+                {getMemberInitial(activeMember)}
               </div>
             )}
             <div>
               <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-2">
-                <span>{activeMember.name}</span>
+                <span>{getMemberDisplayName(activeMember)}</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#EFEAE1] dark:bg-[#28221D] text-[#78716C] dark:text-[#A8A29E] font-medium capitalize">
                   {activeMember.role}
                 </span>
@@ -111,11 +110,8 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
                 key={m.user_id}
                 className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full bg-[#EFEAE1] dark:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] border border-[#DCD5C9] dark:border-[#3D362F]"
               >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: m.avatar_color }}
-                />
-                <span>{m.name}</span>
+                <span className="w-2 h-2 rounded-full shrink-0 bg-[#4E785E]/40 dark:bg-[#A8D1B7]/40" />
+                <span>{getMemberDisplayName(m)}</span>
                 {m.user_id === activeMember.user_id && (
                   <span className="text-[10px] text-[#78716C]">(You)</span>
                 )}

@@ -5,7 +5,6 @@ import {
   Camera,
   Upload,
   User,
-  Check,
   Sparkles,
   Trash2,
   Shield,
@@ -13,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
+import { getMemberDisplayName, getMemberInitial } from '../utils/memberDisplay';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 
 interface ProfileModalProps {
   isOpen?: boolean;
@@ -20,16 +21,6 @@ interface ProfileModalProps {
   onBack?: () => void;
   isOnboarding?: boolean;
 }
-
-const PRESET_COLORS = [
-  '#4E785E', // Sage Green
-  '#B85D43', // Terracotta Rust
-  '#486B88', // Slate Navy
-  '#8B687F', // Dusty Plum
-  '#AF7832', // Warm Amber
-  '#3E7072', // Teal Forest
-  '#7A5F48', // Mocha
-];
 
 export const ProfileScreen: React.FC<ProfileModalProps> = ({
   isOpen = true,
@@ -43,12 +34,11 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
   };
   const { members, activeMember, updateMemberProfile, setActiveMemberId } = useBudget();
   const { user, markUserProfileCompleted } = useAuth();
+  const feedback = useActionFeedback();
 
   const [name, setName] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
-  const [avatarColor, setAvatarColor] = useState<string>('#4E785E');
   const [selectedMemberId, setSelectedMemberId] = useState<string>('');
-  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -56,15 +46,17 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (activeMember) {
-        setName(activeMember.name === 'You' ? '' : (activeMember.name || ''));
+        const googleFallbackName = user?.displayName || user?.email?.split('@')[0] || '';
+        const memberName = activeMember.name && activeMember.name !== 'You'
+          ? getMemberDisplayName(activeMember)
+          : googleFallbackName;
+        setName(memberName);
         setAvatarUrl(activeMember.avatar_url || (user?.photoURL || undefined));
-        setAvatarColor(activeMember.avatar_color || '#4E785E');
         setSelectedMemberId(activeMember.user_id);
       } else if (user) {
         setName(user.displayName || '');
         setAvatarUrl(user.photoURL || undefined);
       }
-      setSavedSuccess(false);
     }
   }, [isOpen, activeMember, user]);
 
@@ -108,25 +100,29 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const finalName = name.trim() || (activeMember?.name && activeMember.name !== 'You' ? activeMember.name : '') || 'You';
+    const finalName = name.trim()
+      || (activeMember?.name && activeMember.name !== 'You' ? activeMember.name : '')
+      || user?.displayName
+      || user?.email?.split('@')[0]
+      || 'You';
     const targetUserId = selectedMemberId || activeMember?.user_id;
 
     if (targetUserId) {
       updateMemberProfile(targetUserId, {
         name: finalName,
         avatar_url: avatarUrl || '',
-        avatar_color: avatarColor,
       });
       setActiveMemberId(targetUserId);
     }
 
     localStorage.setItem('env_budget_profile_completed', 'true');
+    if (user?.uid) {
+      localStorage.setItem(`env_budget_profile_completed_${user.uid}`, 'true');
+    }
     localStorage.setItem('env_budget_user_name', finalName);
-    await markUserProfileCompleted();
-    setSavedSuccess(true);
-    setTimeout(() => {
-      handleBack();
-    }, 450);
+    void markUserProfileCompleted();
+    handleBack();
+    feedback.profileSaved();
   };
 
   if (!isOpen) return null;
@@ -159,7 +155,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
         <div className="px-5 py-3 border-b border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30">
           <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
             {isOnboarding
-              ? 'Tell your household members what name and color to show when you log spending'
+              ? 'Tell your household members what name to show when you log spending'
               : 'Customize your avatar and display name for shared activity'}
           </p>
         </div>
@@ -177,10 +173,8 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
                   className="w-14 h-14 rounded-full object-cover border-2 border-[#FAF7F2] dark:border-[#1A1714] shadow-xs"
                 />
               ) : (
-                <div
-                  style={{ backgroundColor: avatarColor }}
-                  className="w-14 h-14 rounded-full text-white flex items-center justify-center text-xl font-bold border-2 border-[#FAF7F2] dark:border-[#1A1714] shadow-xs"
-                >
+                <div className="w-14 h-14 rounded-full bg-[#4E785E]/15 text-[#4E785E] dark:bg-[#A8D1B7]/15 dark:text-[#A8D1B7] flex items-center justify-center text-xl font-bold border-2 border-[#FAF7F2] dark:border-[#1A1714] shadow-xs">
+
                   {name ? name.charAt(0).toUpperCase() : <User className="w-6 h-6" />}
                 </div>
               )}
@@ -276,9 +270,8 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
                       key={m.user_id}
                       onClick={() => {
                         setSelectedMemberId(m.user_id);
-                        setName(m.name);
+                        setName(getMemberDisplayName(m));
                         setAvatarUrl(m.avatar_url);
-                        setAvatarColor(m.avatar_color);
                       }}
                       className={`p-2 rounded-xl text-left border flex items-center gap-2 transition-all cursor-pointer ${
                         isSelected
@@ -289,20 +282,18 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
                       {m.avatar_url ? (
                         <img
                           src={m.avatar_url}
-                          alt={m.name}
+                          alt={getMemberDisplayName(m)}
                           referrerPolicy="no-referrer"
                           className="w-6 h-6 rounded-full object-cover shrink-0"
                         />
                       ) : (
-                        <span
-                          style={{ backgroundColor: m.avatar_color }}
-                          className="w-6 h-6 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0"
-                        >
-                          {m.name.charAt(0)}
+                        <span className="w-6 h-6 rounded-full bg-[#4E785E]/15 text-[#4E785E] dark:bg-[#A8D1B7]/15 dark:text-[#A8D1B7] text-[11px] font-bold flex items-center justify-center shrink-0">
+
+                          {getMemberInitial(m)}
                         </span>
                       )}
                       <div className="truncate">
-                        <span className="text-xs truncate block">{m.name}</span>
+                        <span className="text-xs truncate block">{getMemberDisplayName(m)}</span>
                         <span className="text-[10px] text-[#78716C] capitalize block">{m.role}</span>
                       </div>
                     </button>
@@ -311,27 +302,6 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
               </div>
             </div>
           )}
-
-          {/* Avatar Color Swatches */}
-          <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E] block mb-1.5">
-              Avatar Color
-            </label>
-            <div className="flex items-center gap-2">
-              {PRESET_COLORS.map(color => (
-                <button
-                  type="button"
-                  key={color}
-                  onClick={() => setAvatarColor(color)}
-                  style={{ backgroundColor: color }}
-                  className={`w-6 h-6 rounded-full transition-transform cursor-pointer ${
-                    avatarColor === color ? 'scale-125 ring-2 ring-offset-2 ring-[#1F1B16] dark:ring-[#EDE8E1]' : 'hover:scale-110'
-                  }`}
-                  title={color}
-                />
-              ))}
-            </div>
-          </div>
 
           {/* Household Context */}
           <div className="pt-2 border-t border-[#E8E3DA]/60 dark:border-[#2D2823]/60 text-[11px] text-[#78716C] dark:text-[#A8A29E]">
@@ -352,14 +322,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
               id="save-profile-btn"
               className="flex-1 py-2 px-3 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              {savedSuccess ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-[#4E785E]" />
-                  <span>Saved!</span>
-                </>
-              ) : (
-                <span>{isOnboarding ? 'Save & Start Budgeting' : 'Save Changes'}</span>
-              )}
+              <span>{isOnboarding ? 'Save & Start Budgeting' : 'Save Changes'}</span>
             </button>
           </div>
         </form>

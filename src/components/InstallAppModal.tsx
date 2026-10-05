@@ -8,10 +8,6 @@ interface InstallAppModalProps {
   hasNativePrompt?: boolean;
 }
 
-function hasLegacyMicrosoftStream(value: Window): value is Window & { MSStream: unknown } {
-  return 'MSStream' in value;
-}
-
 export const InstallAppModal: React.FC<InstallAppModalProps> = ({
   isOpen,
   onClose,
@@ -23,7 +19,7 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
   if (!isOpen) return null;
 
   const isIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !hasLegacyMicrosoftStream(window);
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   const handleCopyLink = () => {
     let url = window.location.href;
@@ -58,10 +54,10 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold tracking-tight">
-              Install Envelope Budgeting
+              Enjoy Envelope Offline
             </h2>
             <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
-              Add to Home Screen for offline access & app experience
+              Install the app for a smoother offline and home-screen experience
             </p>
           </div>
         </div>

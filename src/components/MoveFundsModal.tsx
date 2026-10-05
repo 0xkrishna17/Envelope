@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import {
   ArrowLeft,
   X,
@@ -44,6 +45,7 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
     deleteEnvelopeTransfer,
     members,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   // Active, non-deleted categories
   const availableCategories = useMemo(() => {
@@ -173,14 +175,10 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
       return;
     }
 
-    setSuccessMsg(`Successfully moved ${formatPaise(parsedAmountPaise)} from ${fromCategory?.name} to ${toCategory?.name}.`);
     setAmountRupees('');
     setNote('');
-
-    // Auto return after brief confirmation
-    setTimeout(() => {
-      handleBack();
-    }, 1200);
+    handleBack();
+    feedback.fundsMoved(parsedAmountPaise, fromCategory?.name || 'Envelope', toCategory?.name || 'Envelope');
   };
 
   if (!isOpen) return null;

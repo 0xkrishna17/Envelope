@@ -2,19 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { shouldAutoShowInstallPrompt } from './usePwaInstall';
 
 describe('shouldAutoShowInstallPrompt', () => {
-  it('shows the custom install CTA when a native prompt is first captured in a non-installed session', () => {
+  it('shows the custom install CTA for a non-installed user who has not dismissed it', () => {
     expect(
       shouldAutoShowInstallPrompt({
-        hasSeenPromptThisSession: false,
+        hasDismissedPrompt: false,
         isInstalled: false,
       })
     ).toBe(true);
   });
 
-  it('does not auto-show repeatedly in the same session', () => {
+  it('does not auto-show after the user dismissed the prompt', () => {
     expect(
       shouldAutoShowInstallPrompt({
-        hasSeenPromptThisSession: true,
+        hasDismissedPrompt: true,
         isInstalled: false,
       })
     ).toBe(false);
@@ -23,7 +23,7 @@ describe('shouldAutoShowInstallPrompt', () => {
   it('does not show when the app is already installed', () => {
     expect(
       shouldAutoShowInstallPrompt({
-        hasSeenPromptThisSession: false,
+        hasDismissedPrompt: false,
         isInstalled: true,
       })
     ).toBe(false);

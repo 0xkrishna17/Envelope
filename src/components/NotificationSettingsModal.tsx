@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
 import { calculateCategoryPendingDebt } from '../utils/budgetLogic';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import {
   getBrowserNotificationPermission,
   requestBrowserNotificationPermission,
@@ -31,6 +32,7 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
     transactions,
     reconciliationLines,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   const [reminderTime, setReminderTime] = useState<string>(pushSettings.reminder_time);
   const [enabled, setEnabled] = useState<boolean>(pushSettings.enabled);
@@ -114,6 +116,7 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
     e.preventDefault();
     updatePushSettings(reminderTime, enabled);
     handleBack();
+    feedback.notificationSettingsSaved();
   };
 
   const handleTestNotification = async () => {

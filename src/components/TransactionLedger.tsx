@@ -12,11 +12,13 @@ import {
 import { formatPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { formatSelectedMonth } from '../utils/dateUtils';
+import { getMemberDisplayName } from '../utils/memberDisplay';
 import {
   buildUnifiedLedger,
   UnifiedLedgerEntry,
   LedgerEntryType,
 } from '../utils/ledger';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import {
   Search,
   Filter,
@@ -72,6 +74,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     deleteReconciliation,
     deleteCategoryFunds,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -162,12 +165,15 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     if (inspectEntry.type === 'fund_move') {
       deleteEnvelopeTransfer((inspectEntry.raw as EnvelopeTransfer).id);
       setInspectEntry(null);
+      feedback.transferReversed();
     } else if (inspectEntry.type === 'reconcile') {
       deleteReconciliation((inspectEntry.raw as Reconciliation).id);
       setInspectEntry(null);
+      feedback.cardPaybackReversed();
     } else if (inspectEntry.type === 'category_topup') {
       deleteCategoryFunds(inspectEntry.allocationId || (inspectEntry.raw as Allocation).id);
       setInspectEntry(null);
+      feedback.topUpReversed();
     }
   };
 
@@ -364,7 +370,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                 <option value="all">Everyone</option>
                 {members.map(m => (
                   <option key={m.id} value={m.user_id}>
-                    {m.name}
+                    {getMemberDisplayName(m)}
                   </option>
                 ))}
               </select>
@@ -515,10 +521,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     <div className="text-[11px] text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1.5 mt-0.5 truncate">
                       <span>{entry.date}</span>
                       <span>•</span>
-                      <span
-                        className="font-medium"
-                        style={{ color: entry.loggedByAvatarColor }}
-                      >
+                      <span className="font-medium text-[#4E785E] dark:text-[#A8D1B7]">
                         {entry.loggedByName}
                       </span>
                       <span>•</span>
@@ -669,10 +672,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
               <div className="text-right">
                 <span className="text-[10px] uppercase font-bold text-[#78716C]">Actor</span>
-                <div
-                  className="text-xs font-semibold"
-                  style={{ color: inspectEntry.loggedByAvatarColor }}
-                >
+                <div className="text-xs font-semibold text-[#4E785E] dark:text-[#A8D1B7]">
                   {inspectEntry.loggedByName}
                 </div>
               </div>

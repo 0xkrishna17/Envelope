@@ -26,7 +26,6 @@ export interface Membership {
   user_id: string;
   name: string;
   role: MemberRole;
-  avatar_color: string;
   avatar_url?: string;
   email?: string;
   joined_at: string;

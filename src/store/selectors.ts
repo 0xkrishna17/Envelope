@@ -13,7 +13,6 @@ const FALLBACK_ACTIVE_MEMBER: Membership = {
   user_id: 'usr_me',
   name: 'You',
   role: 'owner',
-  avatar_color: '#4E785E',
   joined_at: '2026-08-01T00:00:00Z',
 };
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, ReactNode, useCallback, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, ReactNode, useCallback, useState, useRef } from 'react';
 import { Provider } from 'react-redux';
 import { useAuth } from './AuthContext';
 import { useApiLoading } from './ApiLoadingContext';
@@ -29,11 +29,6 @@ import {
   selectPermissionDenied,
 } from '../store/selectors';
 import {
-  subscribeToFirestoreHousehold,
-  flushSyncNow,
-  configureSyncAuth,
-} from '../store/syncMiddleware';
-import {
   Household,
   Membership,
   Category,
@@ -60,13 +55,34 @@ import {
   revokeHouseholdInvitation,
   revokeHouseholdMemberAccess,
 } from '../sync/householdInvitations';
-import {
-  persistLocalLedgerCache,
-  persistUserHouseholdLedgerCache,
-  readLocalLedgerCache,
-  readUserHouseholdLedgerCache,
-} from '../sync/localCache';
 import { useSyncRecovery } from '../sync/useSyncRecovery';
+import {
+  createAllocationTransferToggledEvent,
+  createAllAllocationsMarkedTransferredEvent,
+  createCategoryEvent,
+  createCategoryFundsAddedEvent,
+  createCategoryFundsDeletedEvent,
+  createEnvelopeTransferCreatedEvent,
+  createEnvelopeTransferDeletedEvent,
+  createHouseholdUpdatedEvent,
+  createLedgerResetToZeroEvent,
+  createMemberDeletedEvent,
+  createMemberProfileUpdatedEvent,
+  createPushSettingsUpdatedEvent,
+  createReconciliationCreatedEvent,
+  createReconciliationDeletedEvent,
+  createSalaryReceivedEvent,
+  createTransactionAddedEvent,
+  createTransactionCorrectionEvent,
+  createTransactionDeletedEvent,
+  createTransactionUpdateEvents,
+} from '../sync/events/commands';
+import { appendEventAndProject, appendEventsAndProject, hasStoredEvents, projectStoredEvents } from '../sync/events/runtime';
+import { syncCloudEventRuntime } from '../sync/events/cloudRuntime';
+import { createLocalStorageEventStore } from '../sync/events/eventStore';
+import { importLocalEventsToCloudScope } from '../sync/events/importLocalEvents';
+import { pullLedgerEvents, pushLedgerEvents, subscribeToLedgerEvents } from '../sync/events/eventSyncEngine';
+import { EventScope, LedgerEvent, ProjectionSeed } from '../sync/events/types';
 
 export interface BudgetContextType {
   household: Household;
@@ -147,7 +163,7 @@ export interface BudgetContextType {
   updateMemberName: (userId: string, newName: string) => void;
   updateMemberProfile: (
     userId: string,
-    updates: { name?: string; avatar_url?: string; avatar_color?: string }
+    updates: { name?: string; avatar_url?: string }
   ) => void;
   deleteMember: (userId: string) => { success: boolean; error?: string };
   updatePushSettings: (time: string, enabled: boolean) => void;
@@ -156,13 +172,18 @@ export interface BudgetContextType {
 
   // Cloud & Cross-Device Synchronization
   householdId: string;
+  sharedLedgerId: string | null;
   cloudSyncStatus: 'synced' | 'syncing' | 'offline' | 'error';
   cloudSetupStatus: 'local_only' | 'verifying' | 'verified' | 'access_denied';
+  isCloudBootstrapPending: boolean;
   lastCloudSync: string | null;
   pendingInvitations: HouseholdInvitation[];
   sentInvitations: HouseholdInvitation[];
   refreshHouseholdInvitations: () => Promise<void>;
   syncNow: () => Promise<SyncResult>;
+  hasLocalEventsToImport: boolean;
+  importLocalEventsToCloud: () => Promise<SyncResult>;
+  dismissLocalEventImport: () => void;
 
   // Google Account Household Access
   isAccessAllowed: boolean;
@@ -187,6 +208,7 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     profileLoading,
     householdId: authHouseholdId,
     privateLedgerId,
+    sharedLedgerId,
     setVerifiedHouseholdId,
     setSyncStatus: setAuthSyncStatus,
   } = useAuth();
@@ -217,25 +239,46 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
   const permissionDenied = useAppSelector(selectPermissionDenied);
   const [pendingInvitations, setPendingInvitations] = useState<HouseholdInvitation[]>([]);
   const [sentInvitations, setSentInvitations] = useState<HouseholdInvitation[]>([]);
+  const [localEventImportDismissed, setLocalEventImportDismissed] = useState(false);
+  const [isCloudBootstrapPending, setIsCloudBootstrapPending] = useState(false);
+
+  const localEventScope: EventScope = useMemo(() => ({ kind: 'local' }), []);
+  const projectionSeed: ProjectionSeed = useMemo(() => ({
+    household,
+    members,
+    categories,
+    pushSettings,
+    selectedMonth,
+    activeMemberId: activeMember.user_id,
+    firstTimeIntroCompleted: isFirstTimeIntroCompleted,
+    householdId,
+  }), [activeMember.user_id, categories, household, householdId, isFirstTimeIntroCompleted, members, pushSettings, selectedMonth]);
+  const projectionSeedRef = useRef(projectionSeed);
+
+  useEffect(() => {
+    projectionSeedRef.current = projectionSeed;
+  }, [projectionSeed]);
 
   // Sync auth household ID with Redux store after it has been verified or explicitly created.
   useEffect(() => {
+    if (authLoading || profileLoading) return;
+
     dispatch(ledgerActions.resetLedgerState());
 
     if (user && isValidCloudHouseholdId(authHouseholdId)) {
       dispatch(ledgerActions.setHouseholdId(authHouseholdId));
-      const cached = readUserHouseholdLedgerCache(localStorage, user.uid, authHouseholdId);
-      if (cached) {
-        dispatch(ledgerActions.hydrateFromStorage(cached));
-      }
       return;
     }
 
-    const cached = readLocalLedgerCache(localStorage);
-    if (cached) {
-      dispatch(ledgerActions.hydrateFromStorage(cached));
+    if (!user && hasStoredEvents({ storage: localStorage, scope: localEventScope })) {
+      const projected = projectStoredEvents({
+        storage: localStorage,
+        scope: localEventScope,
+        seed: projectionSeedRef.current,
+      });
+      dispatch(ledgerActions.applyProjectedLedger(projected));
     }
-  }, [authHouseholdId, user?.uid, dispatch]);
+  }, [authHouseholdId, authLoading, dispatch, localEventScope, profileLoading, user]);
 
   // Verify profile-controlled active cloud ledger on sign-in/profile changes.
   useEffect(() => {
@@ -243,6 +286,7 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     if (household.owner_uid || household.owner_email || permissionDenied) return;
 
     let cancelled = false;
+    setIsCloudBootstrapPending(true);
     dispatch(ledgerActions.setSyncStatus('syncing'));
     loadHouseholdOnce({
       householdDocId: authHouseholdId,
@@ -255,6 +299,7 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
         dispatch(ledgerActions.setLastCloudSync(result.syncedAt));
         dispatch(ledgerActions.setSyncStatus('synced'));
       } else {
+        setIsCloudBootstrapPending(false);
         dispatch(ledgerActions.setPermissionDenied(result.reason === 'permission_denied'));
         dispatch(ledgerActions.setSyncStatus(result.reason === 'permission_denied' ? 'offline' : 'error'));
       }
@@ -363,23 +408,191 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const hasCloudAcl = Boolean(household.owner_uid || household.owner_email || (household.allowed_emails || []).length > 0);
   const hasVerifiedCloudHousehold = Boolean(user && hasCloudAcl && isValidCloudHouseholdId(householdId));
+  const activeEventScope: EventScope = useMemo(() => {
+    if (user?.uid && hasVerifiedCloudHousehold && isValidCloudHouseholdId(householdId)) {
+      return { kind: 'cloud', userUid: user.uid, householdId };
+    }
+    return localEventScope;
+  }, [hasVerifiedCloudHousehold, householdId, localEventScope, user?.uid]);
 
   useEffect(() => {
-    configureSyncAuth({
-      uid: user?.uid || null,
-      email: user?.email || null,
-      isAccessAllowed: Boolean(user && isAccessAllowed && hasVerifiedCloudHousehold),
+    if (!user || !isValidCloudHouseholdId(authHouseholdId) || permissionDenied) {
+      setIsCloudBootstrapPending(false);
+    }
+  }, [authHouseholdId, permissionDenied, user]);
+
+  const cloudEventSyncHandler = useCallback(async (): Promise<SyncResult> => {
+    if (!user?.uid || activeEventScope.kind !== 'cloud') {
+      return { ok: false, reason: 'signed_out', message: 'Sign in before syncing cloud events.' };
+    }
+
+    dispatch(ledgerActions.setSyncStatus('syncing'));
+    try {
+      const result = await syncCloudEventRuntime({
+        storage: localStorage,
+        scope: activeEventScope,
+        seed: projectionSeed,
+        nowIso: new Date().toISOString(),
+        remote: {
+          pullEvents: async afterRevision => {
+            const pullResult = await pullLedgerEvents({ householdId: activeEventScope.householdId, afterRevision });
+            if (!pullResult.ok) {
+              const failedPull = pullResult.result;
+              if (!failedPull.ok) throw new Error(failedPull.message);
+              throw new Error('Cloud event pull failed.');
+            }
+            return pullResult.events;
+          },
+          pushEvents: async (events: LedgerEvent[]) => {
+            const pushResult = await pushLedgerEvents({ householdId: activeEventScope.householdId, events });
+            if (!pushResult.ok) throw new Error(pushResult.message);
+          },
+        },
+      });
+
+      dispatch(ledgerActions.applyProjectedLedger(result.projected));
+      const syncedAt = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      dispatch(ledgerActions.setLastCloudSync(syncedAt));
+      dispatch(ledgerActions.setSyncStatus('synced'));
+      return { ok: true, syncedAt, version: 0 };
+    } catch (err) {
+      dispatch(ledgerActions.setSyncStatus('offline'));
+      return {
+        ok: false,
+        reason: 'unknown',
+        message: err instanceof Error ? err.message : 'Cloud event sync failed.',
+      };
+    }
+  }, [activeEventScope, dispatch, projectionSeed, user?.uid]);
+  const cloudEventSyncHandlerRef = useRef(cloudEventSyncHandler);
+
+  useEffect(() => {
+    cloudEventSyncHandlerRef.current = cloudEventSyncHandler;
+  }, [cloudEventSyncHandler]);
+
+  const localEventImportDecisionKey = activeEventScope.kind === 'cloud'
+    ? `env_budget_local_event_import_decision_${activeEventScope.householdId}`
+    : null;
+  const hasLocalEventsToImport = useMemo(() => {
+    const hasDecision = localEventImportDecisionKey
+      ? localStorage.getItem(localEventImportDecisionKey) === 'true'
+      : true;
+    return activeEventScope.kind === 'cloud'
+      && !localEventImportDismissed
+      && !hasDecision
+      && hasStoredEvents({ storage: localStorage, scope: localEventScope });
+  }, [activeEventScope, localEventImportDecisionKey, localEventImportDismissed, localEventScope]);
+
+  const importLocalEventsToCloudHandler = useCallback(async (): Promise<SyncResult> => {
+    if (activeEventScope.kind !== 'cloud') {
+      return { ok: false, reason: 'signed_out', message: 'Sign in before importing local events.' };
+    }
+
+    const importedEvents = importLocalEventsToCloudScope({
+      storage: localStorage,
+      localScope: localEventScope,
+      cloudScope: activeEventScope,
+      actorName: user?.displayName || user?.email?.split('@')[0] || activeMember.name || 'You',
+      actorEmail: user?.email || undefined,
+      actorAvatarUrl: user?.photoURL || activeMember.avatar_url,
     });
-  }, [user?.uid, user?.email, isAccessAllowed, hasVerifiedCloudHousehold]);
 
-  // 3. Realtime Firestore Subscription
+    if (localEventImportDecisionKey) {
+      localStorage.setItem(localEventImportDecisionKey, 'true');
+    }
+    if (importedEvents.length === 0) {
+      setLocalEventImportDismissed(true);
+      return { ok: true, syncedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), version: 0 };
+    }
+
+    const result = await cloudEventSyncHandler();
+    setLocalEventImportDismissed(true);
+    return result;
+  }, [activeEventScope, activeMember.avatar_url, activeMember.name, cloudEventSyncHandler, localEventImportDecisionKey, localEventScope, user?.displayName, user?.email, user?.photoURL]);
+
+  const dismissLocalEventImportHandler = useCallback(() => {
+    if (localEventImportDecisionKey) {
+      localStorage.setItem(localEventImportDecisionKey, 'true');
+    }
+    setLocalEventImportDismissed(true);
+  }, [localEventImportDecisionKey]);
+
+  const appendLedgerEvents = useCallback((events: LedgerEvent[]): void => {
+    if (events.length === 0) return;
+    const projected = appendEventsAndProject({
+      storage: localStorage,
+      scope: activeEventScope,
+      seed: projectionSeed,
+      events,
+    });
+    dispatch(ledgerActions.applyProjectedLedger(projected));
+    if (activeEventScope.kind === 'cloud') {
+      cloudEventSyncHandler();
+    }
+  }, [activeEventScope, cloudEventSyncHandler, dispatch, projectionSeed]);
+
+  const createCommandContext = useCallback((nowIso: string) => ({
+    storage: localStorage,
+    scope: activeEventScope,
+    householdId,
+    actorUid: user?.uid || null,
+    actorMemberId: activeMember.user_id,
+    baseRemoteRevision: null,
+    nowIso,
+  }), [activeEventScope, activeMember.user_id, householdId, user?.uid]);
+
+  // 3. Cloud event synchronization. Event projection is the canonical cloud read model.
   useEffect(() => {
-    if (!householdId || !user?.email || !isAccessAllowed || !hasVerifiedCloudHousehold) return;
-    const unsubscribe = subscribeToFirestoreHousehold(householdId, user.email, dispatch);
+    if (!householdId || !user?.email || !isAccessAllowed || !hasVerifiedCloudHousehold || activeEventScope.kind !== 'cloud') return;
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    (async () => {
+      const initialSyncResult = await cloudEventSyncHandlerRef.current();
+      if (cancelled) return;
+      setIsCloudBootstrapPending(false);
+      if (!initialSyncResult.ok) return;
+
+      const eventStore = createLocalStorageEventStore(localStorage);
+      const metadata = eventStore.readMetadata(activeEventScope);
+      unsubscribe = subscribeToLedgerEvents({
+        householdId: activeEventScope.householdId,
+        afterRevision: metadata.lastPulledRemoteRevision,
+        onEvents: events => {
+          if (cancelled || events.length === 0) return;
+          eventStore.appendEvents(activeEventScope, events, 'acked');
+          const maxRevision = events.reduce(
+            (max, event) => Math.max(max, event.serverRevision || 0),
+            eventStore.readMetadata(activeEventScope).lastPulledRemoteRevision
+          );
+          eventStore.writeMetadata(activeEventScope, {
+            ...eventStore.readMetadata(activeEventScope),
+            lastPulledRemoteRevision: maxRevision,
+          });
+          const projected = projectStoredEvents({
+            storage: localStorage,
+            scope: activeEventScope,
+            seed: projectionSeedRef.current,
+          });
+          dispatch(ledgerActions.applyProjectedLedger(projected));
+          const syncedAt = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+          dispatch(ledgerActions.setLastCloudSync(syncedAt));
+          dispatch(ledgerActions.setSyncStatus('synced'));
+        },
+        onError: result => {
+          if (cancelled || result.ok) return;
+          dispatch(ledgerActions.setPermissionDenied(result.reason === 'permission_denied'));
+          dispatch(ledgerActions.setSyncStatus(result.reason === 'permission_denied' ? 'offline' : 'error'));
+        },
+      });
+    })();
+
     return () => {
-      unsubscribe();
+      cancelled = true;
+      unsubscribe?.();
     };
-  }, [householdId, isAccessAllowed, hasVerifiedCloudHousehold, user?.email, dispatch]);
+  }, [activeEventScope, dispatch, householdId, isAccessAllowed, hasVerifiedCloudHousehold, user?.email]);
 
   // 4. Auto-sync Google user profile into household members roster
   useEffect(() => {
@@ -397,15 +610,27 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     const avatar_url = user.photoURL || undefined;
 
     const existing = members.find(m => m.user_id === uid);
-    if (!existing) {
-      dispatch(
-        ledgerActions.updateMemberProfile({
-          userId: uid,
-          updates: { name, avatar_url },
-        })
-      );
-    }
-  }, [user, isAccessAllowed, hasVerifiedCloudHousehold, members, dispatch]);
+    const nowIso = new Date().toISOString();
+    const member = existing || {
+      id: `mem_${uid}`,
+      household_id: householdId,
+      user_id: uid,
+      name,
+      role: 'member' as const,
+      email: user.email || undefined,
+      avatar_url,
+      joined_at: nowIso,
+    };
+    if (existing && existing.name === name && existing.avatar_url === avatar_url) return;
+
+    appendLedgerEvents([
+      createMemberProfileUpdatedEvent(createCommandContext(nowIso), {
+        ...member,
+        name,
+        avatar_url,
+      }),
+    ]);
+  }, [user, isAccessAllowed, hasVerifiedCloudHousehold, householdId, members, appendLedgerEvents, createCommandContext]);
 
   // Actions Facade
   const setSelectedMonthHandler = useCallback((month: string) => {
@@ -424,79 +649,109 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     note?: string;
   }): Transaction => {
     const newId = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    dispatch(
-      ledgerActions.addTransaction({
-        id: newId,
+    const nowIso = new Date().toISOString();
+
+    const event = createTransactionAddedEvent(
+      {
+        storage: localStorage,
+        scope: activeEventScope,
+        householdId,
+        actorUid: user?.uid || null,
+        actorMemberId: activeMember.user_id,
+        baseRemoteRevision: null,
+        nowIso,
+      },
+      {
+        transactionId: newId,
         categoryId: data.category_id,
         amount: data.amount,
         paymentMethod: data.payment_method,
         note: data.note,
         date: data.date,
-        loggedByUserId: activeMember.user_id,
-      })
+      }
     );
-
-    const nowIso = new Date().toISOString();
-    return {
-      id: newId,
-      household_id: household.id,
-      category_id: data.category_id,
-      amount: data.amount,
-      date: data.date,
-      payment_method: data.payment_method,
-      note: data.note?.trim() || undefined,
-      logged_by_user_id: activeMember.user_id,
-      reconciliation_status: data.payment_method === 'credit_card' ? 'pending' : 'n/a',
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-  }, [dispatch, activeMember.user_id, household.id]);
+    const projected = appendEventAndProject({
+      storage: localStorage,
+      scope: activeEventScope,
+      seed: projectionSeed,
+      event,
+    });
+    dispatch(ledgerActions.applyProjectedLedger(projected));
+    if (activeEventScope.kind === 'cloud') {
+      cloudEventSyncHandler();
+    }
+    return event.payload.transaction;
+  }, [activeEventScope, activeMember.user_id, cloudEventSyncHandler, dispatch, householdId, projectionSeed, user?.uid]);
 
   const updateTransactionHandler = useCallback((id: string, updates: Partial<Transaction>) => {
     const existing = transactions.find(t => t.id === id);
     if (!existing) return;
-    dispatch(
-      ledgerActions.updateTransaction({
-        id,
+    const nowIso = new Date().toISOString();
+    const events = createTransactionUpdateEvents(
+      {
+        storage: localStorage,
+        scope: activeEventScope,
+        householdId,
+        actorUid: user?.uid || null,
+        actorMemberId: activeMember.user_id,
+        baseRemoteRevision: null,
+        nowIso,
+      },
+      {
+        existing,
         categoryId: updates.category_id || existing.category_id,
         amount: updates.amount !== undefined ? updates.amount : existing.amount,
         paymentMethod: updates.payment_method || existing.payment_method,
         note: updates.note !== undefined ? updates.note : existing.note,
         date: updates.date || existing.date,
-      })
+        generatedSuffix: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      }
     );
-  }, [dispatch, transactions]);
+    appendLedgerEvents(events);
+  }, [activeEventScope, activeMember.user_id, appendLedgerEvents, householdId, transactions, user?.uid]);
 
   const deleteTransactionHandler = useCallback((id: string) => {
-    dispatch(ledgerActions.deleteTransaction(id));
-  }, [dispatch]);
+    const existing = transactions.find(t => t.id === id);
+    if (!existing) return;
+    const event = createTransactionDeletedEvent(
+      {
+        storage: localStorage,
+        scope: activeEventScope,
+        householdId,
+        actorUid: user?.uid || null,
+        actorMemberId: activeMember.user_id,
+        baseRemoteRevision: null,
+        nowIso: new Date().toISOString(),
+      },
+      existing,
+      `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+    );
+    if (event) appendLedgerEvents([event]);
+  }, [activeEventScope, activeMember.user_id, appendLedgerEvents, householdId, transactions, user?.uid]);
 
   const logCorrectionHandler = useCallback((originalTx: Transaction, differencePaise: number, note?: string): Transaction => {
     const corrNote = note || `Adjustment for "${originalTx.note || 'Transaction'}"`;
-    dispatch(
-      ledgerActions.logCorrection({
-        categoryId: originalTx.category_id,
-        amountPaise: differencePaise,
-        note: corrNote,
-        loggedByUserId: activeMember.user_id,
-      })
-    );
-
     const nowIso = new Date().toISOString();
-    return {
-      id: `tx_corr_${Date.now()}`,
-      household_id: household.id,
-      category_id: originalTx.category_id,
-      amount: differencePaise,
-      payment_method: 'secondary_account_debit',
-      note: `[Correction] ${corrNote}`,
-      date: nowIso.split('T')[0],
-      logged_by_user_id: activeMember.user_id,
-      reconciliation_status: 'n/a',
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-  }, [dispatch, activeMember.user_id, household.id]);
+    const event = createTransactionCorrectionEvent(
+      {
+        storage: localStorage,
+        scope: activeEventScope,
+        householdId,
+        actorUid: user?.uid || null,
+        actorMemberId: activeMember.user_id,
+        baseRemoteRevision: null,
+        nowIso,
+      },
+      {
+        categoryId: originalTx.category_id,
+        amount: differencePaise,
+        note: corrNote,
+        transactionId: `tx_corr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      }
+    );
+    appendLedgerEvents([event]);
+    return event.payload.transaction;
+  }, [activeEventScope, activeMember.user_id, appendLedgerEvents, householdId, user?.uid]);
 
   const addSalaryAndAllocationsHandler = useCallback((
     earnerUserId: string,
@@ -504,36 +759,47 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     date: string,
     allocationsList: { categoryId: string; amountPaise: number }[]
   ) => {
-    dispatch(
-      ledgerActions.addSalaryAndAllocations({
-        earnerUserId,
-        salaryAmountPaise: amountPaise,
-        date,
-        allocations: allocationsList,
-      })
-    );
-
-    const salaryId = `sal_${Date.now()}`;
     const nowIso = new Date().toISOString();
-    const mockSalary: SalaryEvent = {
-      id: salaryId,
-      household_id: household.id,
-      earner_user_id: earnerUserId,
-      amount: amountPaise,
-      date,
-      created_at: nowIso,
-    };
-
-    return { salaryEvent: mockSalary, allocations: [] };
-  }, [dispatch, household.id]);
+    const salaryId = `sal_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const unallocatedCat = categories.find(c => c.is_unallocated);
+    const event = createSalaryReceivedEvent(
+      {
+        storage: localStorage,
+        scope: activeEventScope,
+        householdId,
+        actorUid: user?.uid || null,
+        actorMemberId: activeMember.user_id,
+        baseRemoteRevision: null,
+        nowIso,
+      },
+      {
+        salaryEventId: salaryId,
+        salaryAmount: amountPaise,
+        date,
+        earnerUserId,
+        allocations: allocationsList.map(item => ({ categoryId: item.categoryId, amount: item.amountPaise })),
+        unallocatedCategoryId: unallocatedCat?.id || 'cat_unallocated',
+      }
+    );
+    appendLedgerEvents([event]);
+    return { salaryEvent: event.payload.salaryEvent, allocations: event.payload.allocations };
+  }, [activeEventScope, activeMember.user_id, appendLedgerEvents, categories, householdId, user?.uid]);
 
   const toggleAllocationTransferredHandler = useCallback((allocationId: string) => {
-    dispatch(ledgerActions.toggleAllocationTransferred(allocationId));
-  }, [dispatch]);
+    const allocation = allocations.find(item => item.id === allocationId);
+    if (!allocation) return;
+    const event = createAllocationTransferToggledEvent(createCommandContext(new Date().toISOString()), allocation);
+    appendLedgerEvents([event]);
+  }, [allocations, appendLedgerEvents, createCommandContext]);
 
   const markAllAllocationsTransferredHandler = useCallback((salaryEventId?: string) => {
-    dispatch(ledgerActions.markAllAllocationsTransferred(salaryEventId));
-  }, [dispatch]);
+    const event = createAllAllocationsMarkedTransferredEvent(
+      createCommandContext(new Date().toISOString()),
+      allocations,
+      salaryEventId
+    );
+    if (event) appendLedgerEvents([event]);
+  }, [allocations, appendLedgerEvents, createCommandContext]);
 
   const reconcileCategoryCardSpendHandler = useCallback((
     categoryId: string,
@@ -541,34 +807,38 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     date: string
   ) => {
     const recId = `rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    dispatch(
-      ledgerActions.reconcileCategoryCardSpend({
-        categoryId,
-        amountToPayPaise,
-        date,
-        loggedByUserId: activeMember.user_id,
+    const event = createReconciliationCreatedEvent(
+      createCommandContext(new Date().toISOString()),
+      {
         reconciliationId: recId,
-      })
-    );
-
-    const nowIso = new Date().toISOString();
-    return {
-      reconciliation: {
-        id: recId,
-        household_id: household.id,
-        category_id: categoryId,
-        total_amount: amountToPayPaise,
+        categoryId,
+        amountToPay: amountToPayPaise,
         date,
-        logged_by_user_id: activeMember.user_id,
-        created_at: nowIso,
-      },
-      lines: [],
+        transactions,
+        reconciliationLines,
+      }
+    );
+    appendLedgerEvents([event]);
+    return {
+      reconciliation: event.payload.reconciliation,
+      lines: event.payload.lines,
     };
-  }, [dispatch, activeMember.user_id, household.id]);
+  }, [appendLedgerEvents, createCommandContext, reconciliationLines, transactions]);
 
   const deleteReconciliationHandler = useCallback((reconciliationId: string) => {
-    dispatch(ledgerActions.deleteReconciliation(reconciliationId));
-  }, [dispatch]);
+    const reconciliation = reconciliations.find(item => item.id === reconciliationId);
+    if (!reconciliation) return;
+    const event = createReconciliationDeletedEvent(
+      createCommandContext(new Date().toISOString()),
+      {
+        reconciliation,
+        reconciliationLines,
+        transactions,
+        reversalId: `rec_rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      }
+    );
+    if (event) appendLedgerEvents([event]);
+  }, [appendLedgerEvents, createCommandContext, reconciliationLines, reconciliations, transactions]);
 
   const moveEnvelopeFundsHandler = useCallback((params: {
     fromCategoryId: string;
@@ -588,23 +858,52 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       return { success: false, error: 'Transfer amount must be greater than zero.' };
     }
 
-    dispatch(
-      ledgerActions.moveEnvelopeFunds({
+    const nowIso = new Date().toISOString();
+    const transferId = `tr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const event = createEnvelopeTransferCreatedEvent(
+      {
+        storage: localStorage,
+        scope: activeEventScope,
+        householdId,
+        actorUid: user?.uid || null,
+        actorMemberId: activeMember.user_id,
+        baseRemoteRevision: null,
+        nowIso,
+      },
+      {
+        transferId,
+        debitAllocationId: `alloc_${transferId}_from`,
+        creditAllocationId: `alloc_${transferId}_to`,
         fromCategoryId,
         toCategoryId,
-        amountPaise,
-        date,
+        amount: amountPaise,
+        date: date || nowIso.split('T')[0],
         note,
-        loggedByUserId: activeMember.user_id,
-      })
+      }
     );
-
+    const projected = appendEventAndProject({
+      storage: localStorage,
+      scope: activeEventScope,
+      seed: projectionSeed,
+      event,
+    });
+    dispatch(ledgerActions.applyProjectedLedger(projected));
+    if (activeEventScope.kind === 'cloud') {
+      cloudEventSyncHandler();
+    }
     return { success: true };
-  }, [dispatch, activeMember.user_id]);
+  }, [activeEventScope, activeMember.user_id, cloudEventSyncHandler, dispatch, householdId, projectionSeed, user?.uid]);
 
   const deleteEnvelopeTransferHandler = useCallback((transferId: string) => {
-    dispatch(ledgerActions.deleteEnvelopeTransfer(transferId));
-  }, [dispatch]);
+    const transfer = envelopeTransfers.find(item => item.id === transferId);
+    if (!transfer) return;
+    const event = createEnvelopeTransferDeletedEvent(
+      createCommandContext(new Date().toISOString()),
+      transfer,
+      `tr_rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`
+    );
+    if (event) appendLedgerEvents([event]);
+  }, [appendLedgerEvents, createCommandContext, envelopeTransfers]);
 
   const addCategoryFundsHandler = useCallback((params: {
     categoryId: string;
@@ -625,25 +924,53 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       return { success: false, error: 'Amount must be greater than zero.' };
     }
 
-    dispatch(
-      ledgerActions.addCategoryFunds({
+    const nowIso = new Date().toISOString();
+    const topupId = `env_topup_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const event = createCategoryFundsAddedEvent(
+      {
+        storage: localStorage,
+        scope: activeEventScope,
+        householdId,
+        actorUid: user?.uid || null,
+        actorMemberId: activeMember.user_id,
+        baseRemoteRevision: null,
+        nowIso,
+      },
+      {
+        allocationId: `alloc_${topupId}`,
         categoryId,
-        amountPaise,
+        amount: amountPaise,
         source,
         note,
         date,
         depositHolding,
         transferred,
         loggedByUserId: loggedByUserId || activeMember.user_id,
-      })
+      }
     );
-
+    const projected = appendEventAndProject({
+      storage: localStorage,
+      scope: activeEventScope,
+      seed: projectionSeed,
+      event,
+    });
+    dispatch(ledgerActions.applyProjectedLedger(projected));
+    if (activeEventScope.kind === 'cloud') {
+      cloudEventSyncHandler();
+    }
     return { success: true };
-  }, [dispatch, categories, activeMember.user_id]);
+  }, [activeEventScope, activeMember.user_id, categories, cloudEventSyncHandler, dispatch, householdId, projectionSeed, user?.uid]);
 
   const deleteCategoryFundsHandler = useCallback((allocationId: string) => {
-    dispatch(ledgerActions.deleteCategoryFunds(allocationId));
-  }, [dispatch]);
+    const allocation = allocations.find(item => item.id === allocationId);
+    if (!allocation) return;
+    const event = createCategoryFundsDeletedEvent(
+      createCommandContext(new Date().toISOString()),
+      allocation,
+      `alloc_rev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+    );
+    if (event) appendLedgerEvents([event]);
+  }, [allocations, appendLedgerEvents, createCommandContext]);
 
   const createCategoryHandler = useCallback((name: string, icon: string, color: string, target_amount?: number) => {
     const trimmed = name.trim();
@@ -658,18 +985,25 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       return { success: false, error: `A category named "${trimmed}" already exists.` };
     }
 
-    dispatch(
-      ledgerActions.createCategory({
-        name: trimmed,
-        icon,
-        color,
-        target_amount,
-      })
-    );
+    const nowIso = new Date().toISOString();
+    const category: Category = {
+      id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      household_id: householdId,
+      name: trimmed,
+      icon,
+      color,
+      target_amount: target_amount && target_amount > 0 ? target_amount : undefined,
+      is_archived: false,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+    appendLedgerEvents([createCategoryEvent(createCommandContext(nowIso), 'category.created', category)]);
     return { success: true };
-  }, [dispatch, categories]);
+  }, [appendLedgerEvents, categories, createCommandContext, householdId]);
 
   const updateCategoryHandler = useCallback((id: string, updates: Partial<Category>) => {
+    const existing = categories.find(c => c.id === id);
+    if (!existing) return { success: false, error: 'Category not found.' };
     if (updates.name) {
       const trimmed = updates.name.trim();
       const collision = categories.some(
@@ -680,40 +1014,87 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     }
 
-    dispatch(ledgerActions.updateCategory({ id, updates }));
+    const nowIso = new Date().toISOString();
+    appendLedgerEvents([
+      createCategoryEvent(createCommandContext(nowIso), 'category.updated', {
+        ...existing,
+        ...updates,
+        name: updates.name !== undefined ? updates.name.trim() : existing.name,
+        updated_at: nowIso,
+      }),
+    ]);
     return { success: true };
-  }, [dispatch, categories]);
+  }, [appendLedgerEvents, categories, createCommandContext]);
 
   const archiveCategoryHandler = useCallback((id: string) => {
-    dispatch(ledgerActions.archiveCategory(id));
-  }, [dispatch]);
+    const existing = categories.find(c => c.id === id);
+    if (!existing) return;
+    const nowIso = new Date().toISOString();
+    appendLedgerEvents([
+      createCategoryEvent(createCommandContext(nowIso), 'category.archived', {
+        ...existing,
+        is_archived: true,
+        updated_at: nowIso,
+      }),
+    ]);
+  }, [appendLedgerEvents, categories, createCommandContext]);
 
   const unarchiveCategoryHandler = useCallback((id: string) => {
-    dispatch(ledgerActions.unarchiveCategory(id));
-  }, [dispatch]);
+    const existing = categories.find(c => c.id === id);
+    if (!existing) return;
+    const nowIso = new Date().toISOString();
+    appendLedgerEvents([
+      createCategoryEvent(createCommandContext(nowIso), 'category.unarchived', {
+        ...existing,
+        is_archived: false,
+        updated_at: nowIso,
+      }),
+    ]);
+  }, [appendLedgerEvents, categories, createCommandContext]);
 
   const updateMemberNameHandler = useCallback((userId: string, newName: string) => {
-    dispatch(ledgerActions.updateMemberName({ userId, newName }));
-  }, [dispatch]);
+    const member = members.find(item => item.user_id === userId);
+    if (!member) return;
+    appendLedgerEvents([
+      createMemberProfileUpdatedEvent(createCommandContext(new Date().toISOString()), {
+        ...member,
+        name: newName.trim(),
+      }),
+    ]);
+  }, [appendLedgerEvents, createCommandContext, members]);
 
   const updateMemberProfileHandler = useCallback((
     userId: string,
-    updates: { name?: string; avatar_url?: string; avatar_color?: string }
+    updates: { name?: string; avatar_url?: string }
   ) => {
-    dispatch(ledgerActions.updateMemberProfile({ userId, updates }));
-  }, [dispatch]);
+    const member = members.find(item => item.user_id === userId);
+    if (!member) return;
+    appendLedgerEvents([
+      createMemberProfileUpdatedEvent(createCommandContext(new Date().toISOString()), {
+        ...member,
+        ...updates,
+        name: updates.name !== undefined ? updates.name.trim() : member.name,
+      }),
+    ]);
+  }, [appendLedgerEvents, createCommandContext, members]);
 
   const deleteMemberHandler = useCallback((userId: string) => {
     if (userId === activeMember.user_id) {
       return { success: false, error: 'You cannot delete yourself from the household.' };
     }
-    dispatch(ledgerActions.deleteMember(userId));
+    appendLedgerEvents([createMemberDeletedEvent(createCommandContext(new Date().toISOString()), userId)]);
     return { success: true };
-  }, [dispatch, activeMember.user_id]);
+  }, [activeMember.user_id, appendLedgerEvents, createCommandContext]);
 
   const updatePushSettingsHandler = useCallback((reminder_time: string, enabled: boolean) => {
-    dispatch(ledgerActions.updatePushSettings({ reminder_time, enabled }));
-  }, [dispatch]);
+    appendLedgerEvents([
+      createPushSettingsUpdatedEvent(createCommandContext(new Date().toISOString()), {
+        ...pushSettings,
+        reminder_time,
+        enabled,
+      }),
+    ]);
+  }, [appendLedgerEvents, createCommandContext, pushSettings]);
 
   // ATOMIC ZERO RESET
   const resetLedgerToZeroHandler = useCallback(async (_isFirstTimeIntro: boolean = false): Promise<SyncResult> => {
@@ -724,35 +1105,41 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
     const resetIso = new Date().toISOString();
     const customUserName = localStorage.getItem('env_budget_user_name') || undefined;
 
-    // 1. Dispatch atomic zero reset to Redux Store
-    dispatch(
-      ledgerActions.resetLedgerToZero({
-        resetIso,
-        userName: customUserName,
-      })
+    const event = createLedgerResetToZeroEvent(
+      createCommandContext(resetIso),
+      store.getState().ledger,
+      resetIso,
+      customUserName
     );
+    appendLedgerEvents([event]);
 
-    // 2. Immediately flush state to Firestore when Google-authenticated sync is allowed.
-    if (user && hasVerifiedCloudHousehold) {
-      return await flushSyncNow();
+    // 2. Immediately sync event log when Google-authenticated sync is allowed.
+    if (user && hasVerifiedCloudHousehold && activeEventScope.kind === 'cloud') {
+      return await cloudEventSyncHandler();
     }
 
     return { ok: true, syncedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), version: 0 };
-  }, [dispatch, hasVerifiedCloudHousehold, isOwner, user]);
+  }, [activeEventScope, appendLedgerEvents, cloudEventSyncHandler, createCommandContext, hasVerifiedCloudHousehold, isOwner, user]);
 
   const syncNowHandler = useCallback(async (): Promise<SyncResult> => {
     dispatch(ledgerActions.setPermissionDenied(false));
     const stopLoader = startApiCall('Syncing ledger with Firestore...');
     try {
-      return await flushSyncNow();
+      if (activeEventScope.kind === 'cloud') {
+        return await cloudEventSyncHandler();
+      }
+      return { ok: true, syncedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), version: 0 };
     } finally {
       stopLoader();
     }
-  }, [dispatch, startApiCall]);
+  }, [activeEventScope, cloudEventSyncHandler, dispatch, startApiCall]);
 
   const recoverSyncHandler = useCallback(async (): Promise<SyncResult> => {
-    return await flushSyncNow();
-  }, []);
+    if (activeEventScope.kind === 'cloud') {
+      return await cloudEventSyncHandler();
+    }
+    return { ok: true, syncedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), version: 0 };
+  }, [activeEventScope, cloudEventSyncHandler]);
 
   const refreshHouseholdInvitationsHandler = useCallback(async (): Promise<void> => {
     if (!user?.email) {
@@ -761,14 +1148,19 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       return;
     }
 
-    const [pending, sent] = await Promise.all([
-      listPendingHouseholdInvitations(user.email),
-      isOwner && isValidCloudHouseholdId(householdId)
-        ? listOwnedHouseholdInvitations({ householdId, inviterUid: user.uid })
-        : Promise.resolve([]),
-    ]);
-    setPendingInvitations(pending);
-    setSentInvitations(sent);
+    try {
+      const [pending, sent] = await Promise.all([
+        listPendingHouseholdInvitations(user.email),
+        isOwner && isValidCloudHouseholdId(householdId)
+          ? listOwnedHouseholdInvitations({ householdId, inviterUid: user.uid })
+          : Promise.resolve([]),
+      ]);
+      setPendingInvitations(pending);
+      setSentInvitations(sent);
+    } catch {
+      setPendingInvitations([]);
+      setSentInvitations([]);
+    }
   }, [householdId, isOwner, user?.email, user?.uid]);
 
   const addAllowedEmailHandler = useCallback(async (emailInput: string): Promise<SyncResult> => {
@@ -814,19 +1206,22 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
 
     const currentAllowed = (household.allowed_emails || []).map(e => e.trim().toLowerCase());
     const currentMemberUids = household.member_uids || [];
-    dispatch(ledgerActions.setHousehold({
-      ...household,
-      owner_uid: ownerUid,
-      owner_email: ownerEmail,
-      allowed_emails: Array.from(new Set([...(ownerEmail ? [ownerEmail] : []), ...currentAllowed.filter(item => item !== email)])),
-      member_uids: currentMemberUids.filter(uid => uid !== member.user_id),
-      created_by: ownerUid,
-      updated_at: new Date().toISOString(),
-    }));
-    dispatch(ledgerActions.deleteMember(member.user_id));
+    const nowIso = new Date().toISOString();
+    appendLedgerEvents([
+      createHouseholdUpdatedEvent(createCommandContext(nowIso), {
+        ...household,
+        owner_uid: ownerUid,
+        owner_email: ownerEmail,
+        allowed_emails: Array.from(new Set([...(ownerEmail ? [ownerEmail] : []), ...currentAllowed.filter(item => item !== email)])),
+        member_uids: currentMemberUids.filter(uid => uid !== member.user_id),
+        created_by: ownerUid,
+        updated_at: nowIso,
+      }),
+      createMemberDeletedEvent(createCommandContext(nowIso), member.user_id),
+    ]);
     await refreshHouseholdInvitationsHandler();
     return result;
-  }, [dispatch, household, householdId, isOwner, members, refreshHouseholdInvitationsHandler, user]);
+  }, [appendLedgerEvents, createCommandContext, household, householdId, isOwner, members, refreshHouseholdInvitationsHandler, user]);
 
   useEffect(() => {
     void refreshHouseholdInvitationsHandler();
@@ -841,16 +1236,18 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       invitationId,
       userUid: user.uid,
       userEmail: user.email,
+      previousSharedHouseholdId: sharedLedgerId,
+      privateLedgerId,
       displayName: user.displayName,
       photoURL: user.photoURL,
     });
     if (result.ok && result.householdId) {
-      await setVerifiedHouseholdId(result.householdId);
+      await setVerifiedHouseholdId(result.householdId, result.householdId);
       await refreshHouseholdInvitationsHandler();
       dispatch(ledgerActions.resetLedgerState());
     }
     return result;
-  }, [dispatch, refreshHouseholdInvitationsHandler, setVerifiedHouseholdId, user]);
+  }, [dispatch, privateLedgerId, refreshHouseholdInvitationsHandler, setVerifiedHouseholdId, sharedLedgerId, user]);
 
   const declineInvitationHandler = useCallback(async (invitationId: string): Promise<SyncResult> => {
     if (!user?.email) {
@@ -887,17 +1284,11 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       userEmail: user.email,
     });
     if (result.ok) {
-      await setVerifiedHouseholdId(privateLedgerId);
+      await setVerifiedHouseholdId(privateLedgerId, null);
       dispatch(ledgerActions.resetLedgerState());
     }
     return result;
   }, [dispatch, householdId, isOwner, privateLedgerId, setVerifiedHouseholdId, user]);
-
-  useEffect(() => {
-    if (!user || !hasVerifiedCloudHousehold) {
-      persistLocalLedgerCache(localStorage, store.getState().ledger);
-    }
-  }, [user, hasVerifiedCloudHousehold, householdId, members, categories, salaryEvents, allocations, transactions, reconciliations, reconciliationLines, envelopeTransfers]);
 
   useSyncRecovery({
     enabled: Boolean(user && hasVerifiedCloudHousehold && isAccessAllowed),
@@ -958,13 +1349,18 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       resetLedgerToZero: resetLedgerToZeroHandler,
       isFirstTimeIntroCompleted,
       householdId,
+      sharedLedgerId,
       cloudSyncStatus: syncStatus === 'idle' ? 'synced' : syncStatus,
       cloudSetupStatus,
+      isCloudBootstrapPending: isCloudBootstrapPending || Boolean(user && !profileLoading && isValidCloudHouseholdId(authHouseholdId) && !hasVerifiedCloudHousehold && !permissionDenied),
       lastCloudSync,
       pendingInvitations,
       sentInvitations,
       refreshHouseholdInvitations: refreshHouseholdInvitationsHandler,
       syncNow: syncNowHandler,
+      hasLocalEventsToImport,
+      importLocalEventsToCloud: importLocalEventsToCloudHandler,
+      dismissLocalEventImport: dismissLocalEventImportHandler,
       isAccessAllowed,
       authLoading,
       accessBlockedReason,
@@ -1020,13 +1416,23 @@ const BudgetProviderContent: React.FC<{ children: ReactNode }> = ({ children }) 
       resetLedgerToZeroHandler,
       isFirstTimeIntroCompleted,
       householdId,
+      sharedLedgerId,
       syncStatus,
       cloudSetupStatus,
+      isCloudBootstrapPending,
+      authHouseholdId,
+      hasVerifiedCloudHousehold,
+      permissionDenied,
+      profileLoading,
+      user,
       lastCloudSync,
       pendingInvitations,
       sentInvitations,
       refreshHouseholdInvitationsHandler,
       syncNowHandler,
+      hasLocalEventsToImport,
+      importLocalEventsToCloudHandler,
+      dismissLocalEventImportHandler,
       isAccessAllowed,
       authLoading,
       accessBlockedReason,

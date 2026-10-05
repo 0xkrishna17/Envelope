@@ -5,7 +5,7 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-const INSTALL_PROMPT_SEEN_KEY = 'env_budget_install_prompt_seen_session';
+const INSTALL_PROMPT_DISMISSED_KEY = 'env_budget_install_prompt_dismissed';
 
 function hasStandaloneFlag(value: Navigator): value is Navigator & { standalone: boolean } {
   return 'standalone' in value && typeof value.standalone === 'boolean';
@@ -18,23 +18,31 @@ export function isRunningStandalone(): boolean {
 }
 
 export function shouldAutoShowInstallPrompt(params: {
-  hasSeenPromptThisSession: boolean;
+  hasDismissedPrompt: boolean;
   isInstalled: boolean;
 }): boolean {
-  return !params.hasSeenPromptThisSession && !params.isInstalled;
+  return !params.hasDismissedPrompt && !params.isInstalled;
 }
 
-function hasSeenInstallPromptThisSession(): boolean {
+function hasDismissedInstallPrompt(): boolean {
   try {
-    return sessionStorage.getItem(INSTALL_PROMPT_SEEN_KEY) === 'true';
+    return localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY) === 'true';
   } catch {
     return false;
   }
 }
 
-function markInstallPromptSeenThisSession(): void {
+function markInstallPromptDismissed(): void {
   try {
-    sessionStorage.setItem(INSTALL_PROMPT_SEEN_KEY, 'true');
+    localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, 'true');
+  } catch {
+    // Non-critical: storage can be unavailable in private/restricted contexts.
+  }
+}
+
+function clearInstallPromptDismissed(): void {
+  try {
+    localStorage.removeItem(INSTALL_PROMPT_DISMISSED_KEY);
   } catch {
     // Non-critical: storage can be unavailable in private/restricted contexts.
   }
@@ -70,7 +78,12 @@ export function usePwaInstall() {
       setIsInstalled(true);
       setDeferredPrompt(null);
       setShowInstallGuide(false);
+      clearInstallPromptDismissed();
       return;
+    }
+
+    if (shouldAutoShowInstallPrompt({ hasDismissedPrompt: hasDismissedInstallPrompt(), isInstalled: false })) {
+      setShowInstallGuide(true);
     }
 
     const handleBeforeInstallPrompt = (event: Event) => {
@@ -79,8 +92,7 @@ export function usePwaInstall() {
 
       setDeferredPrompt(event);
 
-      if (shouldAutoShowInstallPrompt({ hasSeenPromptThisSession: hasSeenInstallPromptThisSession(), isInstalled: false })) {
-        markInstallPromptSeenThisSession();
+      if (shouldAutoShowInstallPrompt({ hasDismissedPrompt: hasDismissedInstallPrompt(), isInstalled: false })) {
         setShowInstallGuide(true);
       }
     };
@@ -89,6 +101,7 @@ export function usePwaInstall() {
       setIsInstalled(true);
       setDeferredPrompt(null);
       setShowInstallGuide(false);
+      clearInstallPromptDismissed();
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -116,17 +129,22 @@ export function usePwaInstall() {
       if (outcome === 'accepted') {
         setIsInstalled(true);
         setShowInstallGuide(false);
+        clearInstallPromptDismissed();
         return;
       }
 
-      setShowInstallGuide(true);
+      markInstallPromptDismissed();
+      setShowInstallGuide(false);
     } catch {
       setDeferredPrompt(null);
       setShowInstallGuide(true);
     }
   }, [deferredPrompt, isInstalled]);
 
-  const closeInstallGuide = useCallback(() => setShowInstallGuide(false), []);
+  const closeInstallGuide = useCallback(() => {
+    markInstallPromptDismissed();
+    setShowInstallGuide(false);
+  }, []);
   const openInstallGuide = useCallback(() => setShowInstallGuide(true), []);
 
   return {

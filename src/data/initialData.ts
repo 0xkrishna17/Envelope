@@ -5,6 +5,8 @@ export const INITIAL_HOUSEHOLD: Household = {
   id: DEFAULT_HOUSEHOLD_DOC_ID,
   name: 'Family Budget',
   created_by: 'usr_me',
+  allowed_emails: [],
+  member_uids: [],
   created_at: '2026-08-01T00:00:00Z',
   updated_at: '2026-08-01T00:00:00Z',
 };
@@ -16,7 +18,6 @@ export const INITIAL_MEMBERS: Membership[] = [
     user_id: 'usr_me',
     name: 'You',
     role: 'owner',
-    avatar_color: '#4E785E',
     joined_at: '2026-08-01T00:00:00Z',
   },
 ];

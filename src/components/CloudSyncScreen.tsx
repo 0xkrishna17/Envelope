@@ -36,6 +36,8 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
     cloudSetupStatus,
     lastCloudSync,
     syncNow,
+    householdId,
+    sharedLedgerId,
     household,
     resetLedgerToZero,
     pendingInvitations,
@@ -129,6 +131,12 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
       ? 'Access denied'
       : cloudSyncBadgeStatus;
   const hasLastCloudSync = Boolean(lastCloudSync?.trim());
+  const invitationToAccept = pendingInvitations.find(invitation => invitation.id === invitationIdToAccept);
+  const willReplaceSharedHousehold = Boolean(
+    invitationToAccept &&
+    sharedLedgerId &&
+    sharedLedgerId !== invitationToAccept.household_id
+  );
 
   return (
     <div className="flex flex-col gap-5 max-w-4xl mx-auto w-full pb-28 sm:pb-20 animate-in fade-in">
@@ -382,13 +390,20 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
           await handleInvitationAction(() => acceptInvitation(invitationIdToAccept), 'Household request accepted. Your dashboard now shows the shared household.');
           setInvitationIdToAccept(null);
         }}
-        title="Join Shared Household?"
-        description="Accepting this request switches your active dashboard from your private ledger to the shared household. Your private ledger remains saved and will be restored if you leave the household later."
-        confirmText="Yes, Join Household"
+        title={willReplaceSharedHousehold ? 'Replace Shared Household?' : 'Join Shared Household?'}
+        description={willReplaceSharedHousehold
+          ? 'Accepting this request removes your Google account from your previous shared household and switches your active dashboard to this new shared household. Your private ledger remains saved.'
+          : 'Accepting this request switches your active dashboard from your private ledger to the shared household. Your private ledger remains saved and will be restored if you leave the household later.'}
+        confirmText={willReplaceSharedHousehold ? 'Yes, Replace Shared Household' : 'Yes, Join Household'}
         isZeroReset={false}
-        bulletPoints={[
+        bulletPoints={willReplaceSharedHousehold ? [
+          'You will lose access to your previous shared household',
+          'This new shared household becomes your only partner household',
+          'Your private ledger stays attached to your Google account',
+          'The previous household owner can invite you again later by Google email',
+        ] : [
           'Your current private dashboard will no longer be the active view',
-          'The shared household data will replace what you see after accepting',
+          'The shared household dashboard will become your active view after accepting',
           'Your private ledger stays attached to your Google account',
           'Decline if you want to keep using only your own private household',
         ]}

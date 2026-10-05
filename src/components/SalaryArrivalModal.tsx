@@ -5,6 +5,7 @@ import { renderCategoryIcon } from '../utils/categoryTheme';
 import { ArrowLeft, Check, Plus, Minus, Landmark, Save, Percent, Scale, RefreshCw } from 'lucide-react';
 import { isWholeRupeeInput, parseWholeRupeeInput } from '../utils/wholeRupeeInput';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 
 interface SalaryArrivalModalProps {
   isOpen?: boolean;
@@ -33,6 +34,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
     allocations,
     addSalaryAndAllocations,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   // Step 2: Earner selection (defaults to active user)
   const [selectedEarnerId, setSelectedEarnerId] = useState<string>(activeMember.user_id);
@@ -247,6 +249,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
 
     addSalaryAndAllocations(selectedEarnerId, totalSalaryPaise, clampDateInputToToday(date), allocList);
     handleBack();
+    feedback.salaryAdded();
     if (onSuccessOpenChecklist) {
       onSuccessOpenChecklist();
     }
@@ -306,10 +309,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
                         : 'border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 text-[#78716C] dark:text-[#A8A29E]'
                     }`}
                   >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: member.avatar_color }}
-                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#4E785E]/50 dark:bg-[#A8D1B7]/50" />
                     <span>{member.name}'s Salary</span>
                     {isSelected && <Check className="w-3.5 h-3.5 ml-1" />}
                   </button>

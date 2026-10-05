@@ -6,6 +6,7 @@ import {
   calculateCategoryPendingDebt,
 } from '../utils/budgetLogic';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import { ArrowLeft, X, Check, ArrowRight, RefreshCw, AlertCircle, History, Trash2 } from 'lucide-react';
 
 interface ReconciliationModalProps {
@@ -34,6 +35,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
     deleteReconciliation,
     members,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   // Selected category to pay back
   const [selectedCatId, setSelectedCatId] = useState<string>(preselectedCategoryId || '');
@@ -91,6 +93,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
     const cappedPaise = Math.min(amountPaise, activeDebtItem.totalPendingDebt);
 
     reconcileCategoryCardSpend(activeDebtItem.category.id, cappedPaise, clampDateInputToToday(date));
+    feedback.cardPaybackReconciled();
 
     setJustSettled(true);
     setTimeout(() => {

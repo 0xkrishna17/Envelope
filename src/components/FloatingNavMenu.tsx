@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
+import { getMemberDisplayName, getMemberInitial } from '../utils/memberDisplay';
 
 interface FloatingNavMenuProps {
   onOpenLogSpend: () => void;
@@ -173,19 +174,17 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
                   {activeMember.avatar_url ? (
                     <img
                       src={activeMember.avatar_url}
-                      alt={activeMember.name}
+                      alt={getMemberDisplayName(activeMember)}
                       referrerPolicy="no-referrer"
                       className="w-4 h-4 rounded-full object-cover shrink-0"
                     />
                   ) : (
-                    <div
-                      style={{ backgroundColor: activeMember.avatar_color }}
-                      className="w-4 h-4 rounded-full text-white text-[9px] font-bold flex items-center justify-center shrink-0"
-                    >
-                      {activeMember.name.charAt(0)}
+                    <div className="w-4 h-4 rounded-full bg-[#4E785E]/15 text-[#4E785E] dark:bg-[#A8D1B7]/15 dark:text-[#A8D1B7] text-[9px] font-bold flex items-center justify-center shrink-0">
+
+                      {getMemberInitial(activeMember)}
                     </div>
                   )}
-                  <span>Profile ({activeMember.name})</span>
+                  <span>Profile ({getMemberDisplayName(activeMember)})</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-[#78716C]" />
               </button>

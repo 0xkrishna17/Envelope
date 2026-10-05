@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
 import { ResetDataWarningModal } from './ResetDataWarningModal';
 import { ArrowLeft, Users, ShieldCheck } from 'lucide-react';
+import { getMemberDisplayName, getMemberInitial } from '../utils/memberDisplay';
 
 interface HouseholdInviteScreenProps {
   onBack?: () => void;
@@ -145,14 +146,12 @@ export const HouseholdInviteScreen: React.FC<HouseholdInviteScreenProps> = ({
               className="flex items-center justify-between p-3 rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <span
-                  className="w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center shadow-xs shrink-0"
-                  style={{ backgroundColor: member.avatar_color }}
-                >
-                  {member.name.charAt(0)}
+                <span className="w-8 h-8 rounded-full bg-[#4E785E]/15 text-[#4E785E] dark:bg-[#A8D1B7]/15 dark:text-[#A8D1B7] text-xs font-bold flex items-center justify-center shadow-xs shrink-0">
+
+                  {getMemberInitial(member)}
                 </span>
                 <div className="min-w-0">
-                  <div className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] truncate">{member.name}</div>
+                  <div className="text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] truncate">{getMemberDisplayName(member)}</div>
                   <div className="text-[11px] text-[#78716C] dark:text-[#A8A29E] capitalize">{member.role}</div>
                 </div>
               </div>
@@ -180,7 +179,7 @@ export const HouseholdInviteScreen: React.FC<HouseholdInviteScreenProps> = ({
         isZeroReset={false}
         bulletPoints={[
           'Your current private dashboard will no longer be the active view',
-          'The shared household data will replace what you see after accepting',
+          'The shared household dashboard will become your active view after accepting',
           'Your private ledger stays attached to your Google account',
           'Decline if you want to keep using only your own private household',
         ]}

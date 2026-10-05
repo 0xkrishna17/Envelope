@@ -26,6 +26,17 @@ export function maskIdentifier(value: string | null | undefined): string | null 
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
 }
 
+export function maskEmail(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const [localPart, domain] = value.trim().split('@');
+  if (!localPart || !domain) return maskIdentifier(value.trim());
+
+  const maskedLocal = localPart.length <= 2
+    ? `${localPart.slice(0, 1)}…`
+    : `${localPart.slice(0, 2)}…${localPart.slice(-1)}`;
+  return `${maskedLocal}@${domain.toLowerCase()}`;
+}
+
 function hasStringCode(value: unknown): value is { code: string } {
   return (
     typeof value === 'object' &&

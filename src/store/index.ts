@@ -1,7 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
 import { ledgerReducer } from './ledgerSlice';
-import { syncMiddleware } from './syncMiddleware';
 
 export const store = configureStore({
   reducer: {
@@ -10,7 +9,7 @@ export const store = configureStore({
   middleware: getDefaultMiddleware =>
     getDefaultMiddleware({
       serializableCheck: false,
-    }).concat(syncMiddleware),
+    }),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

@@ -8,16 +8,16 @@ import {
   User,
   db,
 } from '../lib/firebase';
-import { doc, getDoc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore';
-import { INITIAL_CATEGORIES, INITIAL_HOUSEHOLD, INITIAL_MEMBERS } from '../data/initialData';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { INITIAL_HOUSEHOLD } from '../data/initialData';
 import {
   createCloudHouseholdDocId,
   LOCAL_HOUSEHOLD_ID,
   normalizeCloudHouseholdDocId,
 } from '../sync/householdIdentity';
-import { householdPath, householdSubcollectionPath } from '../sync/firestorePaths';
-import { SYNC_SCHEMA_VERSION } from '../sync/firestoreMappers';
-import { Category, Household, Membership } from '../types';
+import { householdPath } from '../sync/firestorePaths';
+import { SYNC_SCHEMA_VERSION } from '../sync/schema';
+import { Household } from '../types';
 
 interface AuthContextType {
   user: User | null;
@@ -27,11 +27,12 @@ interface AuthContextType {
   logout: () => Promise<void>;
   householdId: string;
   privateLedgerId: string | null;
+  sharedLedgerId: string | null;
   userProfileCompleted: boolean;
   userIntroCompleted: boolean;
   markUserProfileCompleted: () => Promise<void>;
   markUserIntroCompleted: () => Promise<void>;
-  setVerifiedHouseholdId: (id: string) => Promise<void>;
+  setVerifiedHouseholdId: (id: string, sharedLedgerId?: string | null) => Promise<void>;
   syncStatus: 'synced' | 'syncing' | 'offline' | 'error';
   setSyncStatus: (status: 'synced' | 'syncing' | 'offline' | 'error') => void;
   authError: string | null;
@@ -44,16 +45,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 interface UserProfileData {
   activeLedgerId?: unknown;
   privateLedgerId?: unknown;
+  sharedLedgerId?: unknown;
   profileCompleted?: unknown;
   introCompleted?: unknown;
 }
 
 function normalizeEmail(email: string | null): string {
   return (email || '').trim().toLowerCase();
-}
-
-function withHouseholdId<T extends { household_id: string }>(item: T, householdId: string): T {
-  return { ...item, household_id: householdId };
 }
 
 async function createPrivateLedgerForUser(currentUser: User, userProfileExists: boolean): Promise<string> {
@@ -75,24 +73,7 @@ async function createPrivateLedgerForUser(currentUser: User, userProfileExists: 
     created_at: nowIso,
     updated_at: nowIso,
   };
-  const members: Membership[] = INITIAL_MEMBERS.map(member => ({
-    ...withHouseholdId(member, ledgerId),
-    id: `mem_${currentUser.uid}`,
-    user_id: currentUser.uid,
-    name: currentUser.displayName || ownerEmail.split('@')[0] || 'You',
-    role: 'owner',
-    email: ownerEmail,
-    avatar_url: currentUser.photoURL || undefined,
-    joined_at: nowIso,
-  }));
-  const categories: Category[] = INITIAL_CATEGORIES.map(category => ({
-    ...withHouseholdId(category, ledgerId),
-    created_at: nowIso,
-    updated_at: nowIso,
-  }));
-
-  const batch = writeBatch(db);
-  batch.set(doc(db, householdPath(ledgerId)), {
+  await setDoc(doc(db, householdPath(ledgerId)), {
     ...household,
     updated_by_uid: currentUser.uid,
     schema_version: SYNC_SCHEMA_VERSION,
@@ -100,13 +81,7 @@ async function createPrivateLedgerForUser(currentUser: User, userProfileExists: 
     first_time_intro_completed: Boolean(household.first_time_intro_completed),
     first_time_intro_completed_at: household.first_time_intro_completed_at || null,
   });
-  for (const member of members) {
-    batch.set(doc(db, householdSubcollectionPath(ledgerId, 'members'), member.id), member);
-  }
-  for (const category of categories) {
-    batch.set(doc(db, householdSubcollectionPath(ledgerId, 'categories'), category.id), category);
-  }
-  batch.set(
+  await setDoc(
     doc(db, 'users', currentUser.uid),
     {
       uid: currentUser.uid,
@@ -115,12 +90,12 @@ async function createPrivateLedgerForUser(currentUser: User, userProfileExists: 
       photoURL: currentUser.photoURL,
       privateLedgerId: ledgerId,
       activeLedgerId: ledgerId,
+      sharedLedgerId: null,
       ...(userProfileExists ? {} : { createdAt: serverTimestamp() }),
       updatedAt: serverTimestamp(),
     },
     { merge: true }
   );
-  await batch.commit();
 
   return ledgerId;
 }
@@ -133,16 +108,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
   const [householdId, setHouseholdIdState] = useState<string>(LOCAL_HOUSEHOLD_ID);
   const [privateLedgerId, setPrivateLedgerId] = useState<string | null>(null);
+  const [sharedLedgerId, setSharedLedgerId] = useState<string | null>(null);
   const [userProfileCompleted, setUserProfileCompleted] = useState<boolean>(false);
   const [userIntroCompleted, setUserIntroCompleted] = useState<boolean>(false);
 
-  const persistActiveLedgerId = async (currentUser: User, ledgerId: string): Promise<string> => {
+  const persistActiveLedgerId = async (currentUser: User, ledgerId: string, nextSharedLedgerId?: string | null): Promise<string> => {
     const cloudLedgerId = normalizeCloudHouseholdDocId(ledgerId);
     if (!cloudLedgerId) {
       throw new Error('A generated cloud ledger id is required.');
     }
 
+    const normalizedSharedLedgerId = typeof nextSharedLedgerId === 'undefined'
+      ? undefined
+      : normalizeCloudHouseholdDocId(nextSharedLedgerId || '');
+
     setHouseholdIdState(cloudLedgerId);
+    if (typeof nextSharedLedgerId !== 'undefined') {
+      setSharedLedgerId(normalizedSharedLedgerId || null);
+    }
     await setDoc(
       doc(db, 'users', currentUser.uid),
       {
@@ -151,6 +134,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         displayName: currentUser.displayName,
         photoURL: currentUser.photoURL,
         activeLedgerId: cloudLedgerId,
+        ...(typeof nextSharedLedgerId === 'undefined' ? {} : { sharedLedgerId: normalizedSharedLedgerId || null }),
         updatedAt: serverTimestamp(),
       },
       { merge: true }
@@ -158,9 +142,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return cloudLedgerId;
   };
 
-  const setVerifiedHouseholdId = async (id: string) => {
+  const setVerifiedHouseholdId = async (id: string, nextSharedLedgerId?: string | null) => {
     if (!user) throw new Error('Sign in before selecting a cloud ledger.');
-    await persistActiveLedgerId(user, id);
+    await persistActiveLedgerId(user, id, nextSharedLedgerId);
   };
 
   const markUserProfileCompleted = async () => {
@@ -224,6 +208,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setUserIntroCompleted(Boolean(profile?.introCompleted));
             let privateId = normalizeCloudHouseholdDocId(String(profile?.privateLedgerId || ''));
             let activeId = normalizeCloudHouseholdDocId(String(profile?.activeLedgerId || ''));
+            let sharedId = normalizeCloudHouseholdDocId(String(profile?.sharedLedgerId || ''));
 
             const createdPrivateLedger = !privateId;
             if (!privateId) {
@@ -231,6 +216,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
             if (!activeId) {
               activeId = privateId;
+            }
+            if (!sharedId && activeId !== privateId) {
+              sharedId = activeId;
+            }
+            if (sharedId === privateId) {
+              sharedId = '';
             }
 
             if (!createdPrivateLedger) {
@@ -243,6 +234,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                   photoURL: currentUser.photoURL,
                   privateLedgerId: privateId,
                   activeLedgerId: activeId,
+                  sharedLedgerId: sharedId || null,
                   ...(userSnap.exists() ? {} : { createdAt: serverTimestamp() }),
                   updatedAt: serverTimestamp(),
                 },
@@ -251,11 +243,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             setPrivateLedgerId(privateId);
+            setSharedLedgerId(sharedId || null);
             setHouseholdIdState(activeId);
           } catch (err: unknown) {
             console.error('Error fetching/creating user profile:', err);
             setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
             setPrivateLedgerId(null);
+            setSharedLedgerId(null);
             setUserProfileCompleted(false);
             setUserIntroCompleted(false);
             setAuthError(err instanceof Error ? err.message : 'Failed to prepare your private ledger.');
@@ -269,6 +263,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch {}
         setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
         setPrivateLedgerId(null);
+        setSharedLedgerId(null);
         setUserProfileCompleted(false);
         setUserIntroCompleted(false);
         setProfileLoading(false);
@@ -296,6 +291,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.removeItem(AUTH_STATUS_KEY);
       setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
       setPrivateLedgerId(null);
+      setSharedLedgerId(null);
       setUserProfileCompleted(false);
       setUserIntroCompleted(false);
       await signOut(auth);
@@ -315,6 +311,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         logout,
         householdId,
         privateLedgerId,
+        sharedLedgerId,
         userProfileCompleted,
         userIntroCompleted,
         markUserProfileCompleted,

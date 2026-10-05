@@ -125,7 +125,8 @@ describe('mobile styling safeguards', () => {
   });
 
   it('keeps the envelope detail header and actions compact on mobile', () => {
-    expect(categoryDetailSource).toContain('<span>Back</span>');
+    expect(categoryDetailSource).toContain('aria-label="Back to envelopes"');
+    expect(categoryDetailSource).not.toContain('<span>Back</span>');
     expect(categoryDetailSource).not.toContain('Back to Envelopes');
     expect(categoryDetailSource).toContain('absolute top-3 right-3 text-[9px]');
     expect(categoryDetailSource).toContain("{category.is_unallocated ? 'Surplus' : 'Envelope'}");

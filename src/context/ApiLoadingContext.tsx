@@ -97,7 +97,7 @@ export const ApiLoadingProvider: React.FC<{ children: ReactNode }> = ({ children
       )}
 
       {/* Floating Toast Alerts */}
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-90 flex flex-col gap-2 pointer-events-none items-center">
+      <div className="fixed bottom-24 sm:bottom-10 left-1/2 -translate-x-1/2 z-90 flex flex-col gap-2 pointer-events-none items-center">
         {toasts.map(toast => (
           <div
             key={toast.id}

@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { describeErrorCode, maskIdentifier, summarizeSyncResult } from './syncDebug';
+import { describeErrorCode, maskEmail, maskIdentifier, summarizeSyncResult } from './syncDebug';
 
 describe('sync debug helpers', () => {
   it('masks identifiers before they are logged', () => {
     expect(maskIdentifier('household_abcdef123456')).toBe('hous…3456');
     expect(maskIdentifier('abcd')).toBe('ab…cd');
     expect(maskIdentifier(null)).toBeNull();
+  });
+
+  it('masks email addresses before they are logged', () => {
+    expect(maskEmail('Owner.Account@Example.COM')).toBe('Ow…t@example.com');
+    expect(maskEmail('x@example.com')).toBe('x…@example.com');
+    expect(maskEmail('not-an-email')).toBe('not-…mail');
+    expect(maskEmail(null)).toBeNull();
   });
 
   it('summarizes sync results without adding credentials', () => {

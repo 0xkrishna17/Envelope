@@ -15,4 +15,13 @@ describe('service worker source', () => {
     expect(serviceWorkerSource).toContain('return !isHtmlResponse(response);');
     expect(serviceWorkerSource).toContain('return Response.error();');
   });
+
+  it('versions caches and activates updated workers promptly', () => {
+    expect(serviceWorkerSource).toContain("const APP_VERSION = 'v1.0.1';");
+    expect(serviceWorkerSource).toContain('const CACHE_NAME = `envelope-budget-${APP_VERSION}`;');
+    expect(serviceWorkerSource).toContain('self.skipWaiting()');
+    expect(serviceWorkerSource).toContain('self.clients.claim()');
+    expect(serviceWorkerSource).toContain("event.data?.type === 'SKIP_WAITING'");
+    expect(serviceWorkerSource).toContain('caches.delete(key)');
+  });
 });

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
+import { getMemberDisplayName } from '../utils/memberDisplay';
 import { renderCategoryIcon } from '../utils/categoryTheme';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import {
   ArrowLeft,
@@ -54,6 +56,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
     addCategoryFunds,
     moveEnvelopeFunds,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   // Active envelopes excluding archived and deleted
   const activeEnvelopes = useMemo(() => {
@@ -179,6 +182,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
       }
 
       handleBack();
+      feedback.fundsMoved(parsedAmountPaise, unallocatedCat.name, selectedCategory?.name || 'Envelope');
       return;
     }
 
@@ -199,6 +203,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
     }
 
     handleBack();
+    feedback.fundsAdded(parsedAmountPaise, selectedCategory?.name || 'Envelope');
   };
 
   if (!isOpen) return null;
@@ -459,7 +464,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
                   className="w-full min-h-11 sm:min-h-10 px-3 py-2 text-sm sm:text-xs rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] bg-white dark:bg-[#201C18] text-[#1F1B16] dark:text-[#EDE8E1] focus:outline-hidden focus:ring-1 focus:ring-[#2C523B] flex items-center justify-between gap-2 text-left"
                 >
                   <span className="truncate">
-                    {selectedLoggedByMember ? `${selectedLoggedByMember.name} (${selectedLoggedByMember.role})` : 'Select member'}
+                    {selectedLoggedByMember ? `${getMemberDisplayName(selectedLoggedByMember)} (${selectedLoggedByMember.role})` : 'Select member'}
                   </span>
                   <ChevronDown className={`w-4 h-4 shrink-0 text-[#78716C] transition-transform ${isLoggedByMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -489,7 +494,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
                               : 'text-[#78716C] dark:text-[#A8A29E] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
                           }`}
                         >
-                          {m.name} ({m.role})
+                          {getMemberDisplayName(m)} ({m.role})
                         </button>
                       );
                     })}

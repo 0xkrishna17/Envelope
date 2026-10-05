@@ -23,6 +23,7 @@ import { ProfileScreen } from './components/ProfileModal';
 import { AppTourGuide } from './components/AppTourGuide';
 import { AccessDeniedGate } from './components/AccessDeniedGate';
 import { InstallAppModal } from './components/InstallAppModal';
+import { ResetDataWarningModal } from './components/ResetDataWarningModal';
 import { usePwaInstall } from './hooks/usePwaInstall';
 import { ApiLoadingProvider } from './context/ApiLoadingContext';
 import { formatPaise, paiseToWords } from './utils/currency';
@@ -30,7 +31,7 @@ import { Transaction, ActiveTab } from './types';
 import { Plus, PlusCircle, Wallet, RefreshCw, Layers, ShieldCheck, ArrowRight, ArrowLeftRight, Settings, User, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // App version as instructed by user: "lets add version no of app and with each iteration lets keep increasing version no at bottom right in small text."
-export const APP_VERSION = 'v1.0.0';
+export const APP_VERSION = 'v1.0.1';
 
 function BudgetAppContent() {
   const {
@@ -43,7 +44,11 @@ function BudgetAppContent() {
     isFirstTimeIntroCompleted,
     isAccessAllowed,
     cloudSetupStatus,
+    isCloudBootstrapPending,
     syncNow,
+    hasLocalEventsToImport,
+    importLocalEventsToCloud,
+    dismissLocalEventImport,
   } = useBudget();
 
   const { isInstalled, showInstallGuide, triggerInstall, closeInstallGuide, hasNativePrompt } = usePwaInstall();
@@ -76,12 +81,16 @@ function BudgetAppContent() {
     setIsTourOpen(true);
   };
 
+  const localProfilePromptKey = user
+    ? `env_budget_profile_completed_${user.uid}`
+    : 'env_budget_profile_completed';
+
   useEffect(() => {
     if (authLoading || profileLoading) return;
 
     const hasCompletedProfile = user
-      ? userProfileCompleted
-      : localStorage.getItem('env_budget_profile_completed') === 'true';
+      ? userProfileCompleted || localStorage.getItem(localProfilePromptKey) === 'true'
+      : localStorage.getItem(localProfilePromptKey) === 'true';
 
     if (!hasCompletedProfile) {
       const timer = setTimeout(() => {
@@ -100,12 +109,13 @@ function BudgetAppContent() {
         return () => clearTimeout(timer);
       }
     }
-  }, [authLoading, isFirstTimeIntroCompleted, profileLoading, user, userIntroCompleted, userProfileCompleted]);
+  }, [authLoading, isFirstTimeIntroCompleted, localProfilePromptKey, profileLoading, user, userIntroCompleted, userProfileCompleted]);
 
   const handleCloseProfileScreen = () => {
     const wasOnboarding = currentScreen?.type === 'profile' && currentScreen.isOnboarding;
     setCurrentScreen(null);
     if (wasOnboarding) {
+      localStorage.setItem(localProfilePromptKey, 'true');
       const hasCompletedIntro = user
         ? userIntroCompleted || isFirstTimeIntroCompleted
         : isFirstTimeIntroCompleted || localStorage.getItem('env_budget_first_time_intro_done') === 'true';
@@ -164,6 +174,44 @@ function BudgetAppContent() {
   const handleOpenEnvelopeDetail = (catId: string) => {
     setCurrentScreen({ type: 'envelope-detail', categoryId: catId });
   };
+
+  if ((authLoading || (user && (profileLoading || isCloudBootstrapPending))) && currentScreen?.type !== 'profile') {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] text-[#1F1B16] dark:bg-[#1A1714] dark:text-[#EDE8E1] flex flex-col antialiased selection:bg-[#E8C5BC] selection:text-[#87341D]">
+        <Header
+          activeTab={activeTab}
+          setActiveTab={tab => {
+            setActiveTab(tab);
+            setCurrentScreen(null);
+          }}
+          onOpenSalaryModal={() => {}}
+          onOpenReconcileModal={() => {}}
+          onOpenMoveFundsModal={() => {}}
+          onOpenVoiceModal={() => {}}
+          onOpenInviteModal={() => {}}
+          onOpenNotificationModal={() => {}}
+          onOpenCloudSyncModal={() => {
+            setActiveTab('sync');
+            setCurrentScreen(null);
+          }}
+          onOpenProfileModal={() => setCurrentScreen({ type: 'profile', isOnboarding: false })}
+        />
+        <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-8 flex items-center justify-center">
+          <div className="w-full max-w-sm rounded-3xl border border-[#E8E3DA] dark:border-[#2D2823] bg-[#FAF7F2] dark:bg-[#1A1714] shadow-xs p-6 text-center space-y-3">
+            <div className="mx-auto w-11 h-11 rounded-2xl bg-[#486B88]/15 text-[#486B88] flex items-center justify-center">
+              <RefreshCw className="w-5 h-5 animate-spin" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-[#1F1B16] dark:text-[#EDE8E1]">Loading your latest budget</h2>
+              <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1">
+                Replaying your cloud events so balances do not show stale values.
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   if (cloudSetupStatus === 'access_denied' && !authLoading) {
     return (
@@ -563,6 +611,23 @@ function BudgetAppContent() {
         onOpenProfileModal={() => setCurrentScreen({ type: 'profile', isOnboarding: false })}
         onOpenTour={handleOpenTourSafely}
         onOpenInstallModal={() => setIsInstallModalOpen(true)}
+      />
+
+      <ResetDataWarningModal
+        isOpen={hasLocalEventsToImport}
+        onClose={dismissLocalEventImport}
+        onConfirm={async () => {
+          await importLocalEventsToCloud();
+        }}
+        title="Import this device’s budget?"
+        description="You have budget activity saved on this device. Import it into your signed-in household so it appears across your devices."
+        confirmText="Import to Cloud"
+        isZeroReset={false}
+        bulletPoints={[
+          'Your local transactions, top-ups, transfers, and allocations will be added to this household',
+          'The imported activity will sync to your signed-in Google household',
+          'Choosing Cancel keeps this cloud household empty for now',
+        ]}
       />
 
       {/* Progressive Web App Install Modal */}

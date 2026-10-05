@@ -4,6 +4,8 @@ import { PaymentMethod } from '../types';
 import { rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
+import { getMemberDisplayName } from '../utils/memberDisplay';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import {
   ArrowLeft,
   Calendar,
@@ -42,6 +44,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
     transactions,
     addTransaction,
   } = useBudget();
+  const feedback = useActionFeedback();
 
   const handleBack = () => {
     if (onBack) onBack();
@@ -125,7 +128,9 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
       note: note.trim() || undefined,
     });
 
+    const selectedCategory = activeCategories.find(category => category.id === selectedCategoryId);
     handleBack();
+    feedback.expenseLogged(selectedCategory?.name || 'Envelope');
   };
 
   const selectedCategory = activeCategories.find(c => c.id === selectedCategoryId);
@@ -147,14 +152,8 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
           <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
             Log Expense
           </span>
-          <span
-            className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-            style={{
-              backgroundColor: `${activeMember.avatar_color}20`,
-              color: activeMember.avatar_color,
-            }}
-          >
-            by {activeMember.name}
+          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-[#4E785E]/10 text-[#4E785E] dark:bg-[#A8D1B7]/10 dark:text-[#A8D1B7]">
+            Logged by {getMemberDisplayName(activeMember)}
           </span>
         </div>
       </div>
