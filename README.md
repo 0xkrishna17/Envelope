@@ -70,15 +70,44 @@ Run TypeScript checks:
 bun run lint
 ```
 
-## 🌐 Netlify build
+## 🌐 Deployment
+
+### Netlify app bundle
 
 For Netlify frontend deployment:
 
 ```bash
 bun run build:netlify
+netlify deploy --prod --dir=dist --skip-functions-cache
 ```
 
 Netlify Functions live in `netlify/functions/`, and API redirects are configured in `netlify.toml`.
+
+### Firestore security rules
+
+Netlify deploys do **not** publish Firestore security rules. Deploy `firestore.rules` separately whenever household access, invitations, sync permissions, or user-profile authorization rules change:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+Recommended production order:
+
+1. Run local checks:
+   ```bash
+   bun run test
+   bun run lint
+   ```
+2. Build and deploy the Netlify app bundle:
+   ```bash
+   bun run build:netlify
+   netlify deploy --prod --dir=dist --skip-functions-cache
+   ```
+3. Deploy Firestore rules if `firestore.rules` changed:
+   ```bash
+   firebase deploy --only firestore:rules
+   ```
+4. Hard-refresh installed/PWA clients or unregister the old service worker if testing freshly deployed behavior.
 
 ## 🔐 Environment variables
 
