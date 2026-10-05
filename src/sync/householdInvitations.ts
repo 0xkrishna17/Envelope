@@ -14,9 +14,10 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db as appDb } from '../lib/firebase';
-import { HouseholdInvitation, Membership } from '../types';
-import { householdPath, householdSubcollectionPath } from './firestorePaths';
+import { HouseholdInvitation } from '../types';
+import { householdPath } from './firestorePaths';
 import { isValidCloudHouseholdId } from './householdIdentity';
+import { describeErrorCode, logSyncDebug, maskEmail, maskIdentifier } from '../utils/syncDebug';
 import { SyncResult, syncFailure, syncSuccess } from './types';
 
 export const INVITATIONS_COLLECTION = 'householdInvitations';
@@ -37,6 +38,58 @@ export function validateInvitationEmail(email: string): string | null {
 
 export function householdInvitationDocId(householdId: string, inviteeEmail: string): string {
   return `${householdId}__${normalizeInvitationEmail(inviteeEmail)}`;
+}
+
+export interface HouseholdInvitationDocumentInput {
+  householdId: string;
+  householdName: string;
+  inviterUid: string;
+  inviterEmail: string;
+  inviteeEmail: string;
+  nowIso: string;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+export interface HouseholdInvitationDocument {
+  household_id: string;
+  household_name: string;
+  inviter_uid: string;
+  inviter_email: string;
+  invitee_email: string;
+  status: 'pending';
+  created_at: string;
+  updated_at: string;
+  createdAt: unknown;
+  updatedAt: unknown;
+}
+
+export function createHouseholdInvitationDocument(input: HouseholdInvitationDocumentInput): HouseholdInvitationDocument {
+  return {
+    household_id: input.householdId,
+    household_name: input.householdName,
+    inviter_uid: input.inviterUid,
+    inviter_email: input.inviterEmail.trim(),
+    invitee_email: normalizeInvitationEmail(input.inviteeEmail),
+    status: 'pending',
+    created_at: input.nowIso,
+    updated_at: input.nowIso,
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+  };
+}
+
+export function shouldDetachPreviousSharedHousehold(params: {
+  acceptedHouseholdId: string;
+  previousSharedHouseholdId?: string | null;
+  privateLedgerId?: string | null;
+}): boolean {
+  return Boolean(
+    params.previousSharedHouseholdId &&
+    isValidCloudHouseholdId(params.previousSharedHouseholdId) &&
+    params.previousSharedHouseholdId !== params.acceptedHouseholdId &&
+    params.previousSharedHouseholdId !== params.privateLedgerId
+  );
 }
 
 function mapInvitation(id: string, data: Record<string, unknown>): HouseholdInvitation {
@@ -67,6 +120,32 @@ function syncedNow(): string {
   return new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
+function logInvitationDebug(event: string, params: {
+  householdId?: string;
+  inviterUid?: string;
+  inviterEmail?: string;
+  inviteeEmail?: string;
+  invitationId?: string;
+  phase?: string;
+  error?: unknown;
+  pendingCount?: number;
+  invitationDocExists?: boolean;
+  invitationStatus?: HouseholdInvitation['status'] | 'unknown';
+}): void {
+  logSyncDebug(`household invitation ${event}`, {
+    householdId: maskIdentifier(params.householdId),
+    inviterUid: maskIdentifier(params.inviterUid),
+    inviterEmail: maskEmail(params.inviterEmail),
+    inviteeEmail: maskEmail(params.inviteeEmail),
+    invitationId: maskIdentifier(params.invitationId),
+    phase: params.phase,
+    errorCode: params.error ? describeErrorCode(params.error) : undefined,
+    pendingCount: params.pendingCount,
+    invitationDocExists: params.invitationDocExists,
+    invitationStatus: params.invitationStatus,
+  });
+}
+
 export async function createHouseholdInvitation(params: {
   householdId: string;
   householdName: string;
@@ -78,45 +157,74 @@ export async function createHouseholdInvitation(params: {
   if (!firestore) return syncFailure('network', 'Firestore is not available in this environment.');
 
   const inviteeEmail = validateInvitationEmail(params.inviteeEmail);
-  const inviterEmail = validateInvitationEmail(params.inviterEmail);
-  if (!inviteeEmail || !inviterEmail) {
+  const normalizedInviterEmail = validateInvitationEmail(params.inviterEmail);
+  const inviterEmail = params.inviterEmail.trim();
+  if (!inviteeEmail || !normalizedInviterEmail || !inviterEmail) {
     return syncFailure('unknown', 'Please enter a valid Google email address.');
   }
   if (!isValidCloudHouseholdId(params.householdId)) {
     return syncFailure('unknown', 'A verified cloud ledger is required before inviting members.');
   }
-  if (inviteeEmail === inviterEmail) {
+  if (inviteeEmail === normalizedInviterEmail) {
     return syncFailure('unknown', 'You are already the owner of this household.');
   }
 
-  try {
-    const existing = await getDocs(
-      query(
-        collection(firestore, INVITATIONS_COLLECTION),
-        where('household_id', '==', params.householdId),
-        where('invitee_email', '==', inviteeEmail),
-        where('status', '==', 'pending')
-      )
-    );
-    if (!existing.empty) {
-      return syncFailure('unknown', 'This email already has a pending household request.');
-    }
+  const debugContext = {
+    householdId: params.householdId,
+    inviterUid: params.inviterUid,
+    inviterEmail,
+    inviteeEmail,
+    invitationId: householdInvitationDocId(params.householdId, inviteeEmail),
+  };
+  logInvitationDebug('create started', debugContext);
+  logInvitationDebug('duplicate preflight skipped', {
+    ...debugContext,
+    phase: 'deterministic-invitation-id',
+  });
 
-    const nowIso = new Date().toISOString();
-    await setDoc(doc(firestore, INVITATIONS_COLLECTION, householdInvitationDocId(params.householdId, inviteeEmail)), {
-      household_id: params.householdId,
-      household_name: params.householdName,
-      inviter_uid: params.inviterUid,
-      inviter_email: inviterEmail,
-      invitee_email: inviteeEmail,
-      status: 'pending',
-      created_at: nowIso,
-      updated_at: nowIso,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+  const invitationRef = doc(firestore, INVITATIONS_COLLECTION, debugContext.invitationId);
+  try {
+    const existingInvitationSnap = await getDoc(invitationRef);
+    const existingStatus = existingInvitationSnap.exists()
+      ? mapInvitation(existingInvitationSnap.id, existingInvitationSnap.data()).status
+      : undefined;
+    logInvitationDebug('existing doc checked', {
+      ...debugContext,
+      phase: 'read-deterministic-invitation-doc',
+      invitationDocExists: existingInvitationSnap.exists(),
+      invitationStatus: existingStatus,
     });
+  } catch (err) {
+    logInvitationDebug('existing doc check failed', {
+      ...debugContext,
+      phase: 'read-deterministic-invitation-doc',
+      error: err,
+    });
+  }
+
+  try {
+    const nowIso = new Date().toISOString();
+    await setDoc(
+      invitationRef,
+      createHouseholdInvitationDocument({
+        householdId: params.householdId,
+        householdName: params.householdName,
+        inviterUid: params.inviterUid,
+        inviterEmail,
+        inviteeEmail,
+        nowIso,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+    );
+    logInvitationDebug('write completed', debugContext);
     return syncSuccess(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), 0);
   } catch (err) {
+    logInvitationDebug('write failed', {
+      ...debugContext,
+      phase: 'write-invitation',
+      error: err,
+    });
     return mapError(err);
   }
 }
@@ -160,6 +268,8 @@ export async function acceptHouseholdInvitation(params: {
   invitationId: string;
   userUid: string;
   userEmail: string;
+  previousSharedHouseholdId?: string | null;
+  privateLedgerId?: string | null;
   displayName?: string | null;
   photoURL?: string | null;
 }): Promise<SyncResult & { householdId?: string }> {
@@ -188,29 +298,32 @@ export async function acceptHouseholdInvitation(params: {
     }
 
     const householdRef = doc(firestore, householdPath(invitation.household_id));
+    const previousSharedHouseholdId = params.previousSharedHouseholdId || null;
+    const shouldDetachPrevious = shouldDetachPreviousSharedHousehold({
+      acceptedHouseholdId: invitation.household_id,
+      previousSharedHouseholdId,
+      privateLedgerId: params.privateLedgerId,
+    });
     const nowIso = new Date().toISOString();
-    const member: Membership = {
-      id: `mem_${params.userUid}`,
-      household_id: invitation.household_id,
-      user_id: params.userUid,
-      name: params.displayName || userEmail.split('@')[0] || 'Member',
-      role: 'member',
-      avatar_color: '#486B88',
-      email: userEmail,
-      avatar_url: params.photoURL || undefined,
-      joined_at: nowIso,
-    };
 
     const batch = writeBatch(firestore);
+    if (shouldDetachPrevious && previousSharedHouseholdId) {
+      batch.update(doc(firestore, householdPath(previousSharedHouseholdId)), {
+        allowed_emails: arrayRemove(userEmail),
+        member_uids: arrayRemove(params.userUid),
+        updated_at: nowIso,
+        updated_by_uid: params.userUid,
+      });
+    }
     batch.update(householdRef, {
       allowed_emails: arrayUnion(userEmail),
       member_uids: arrayUnion(params.userUid),
       updated_at: nowIso,
       updated_by_uid: params.userUid,
     });
-    batch.set(doc(firestore, householdSubcollectionPath(invitation.household_id, 'members'), member.id), member, { merge: true });
     batch.update(doc(firestore, 'users', params.userUid), {
       activeLedgerId: invitation.household_id,
+      sharedLedgerId: invitation.household_id,
       updatedAt: serverTimestamp(),
     });
     batch.update(invitationRef, {
@@ -321,11 +434,6 @@ export async function revokeHouseholdMemberAccess(params: {
       updated_at: nowIso,
       updated_by_uid: params.ownerUid,
     });
-    batch.set(
-      doc(firestore, householdSubcollectionPath(params.householdId, 'members'), `mem_${params.memberUid}`),
-      { deleted_at: nowIso },
-      { merge: true }
-    );
     await batch.commit();
 
     return syncSuccess(syncedNow(), 0);
@@ -366,6 +474,7 @@ export async function leaveHousehold(params: {
     const batch = writeBatch(firestore);
     batch.update(userRef, {
       activeLedgerId: params.privateLedgerId,
+      sharedLedgerId: null,
       updatedAt: serverTimestamp(),
     });
     batch.update(householdRef, {
@@ -373,9 +482,6 @@ export async function leaveHousehold(params: {
       member_uids: arrayRemove(params.userUid),
       updated_at: nowIso,
       updated_by_uid: params.userUid,
-    });
-    batch.update(doc(firestore, householdSubcollectionPath(params.householdId, 'members'), `mem_${params.userUid}`), {
-      deleted_at: nowIso,
     });
     await batch.commit();
 

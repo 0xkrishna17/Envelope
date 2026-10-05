@@ -1,5 +1,4 @@
 export const LOCAL_HOUSEHOLD_ID = 'local';
-export const LEGACY_SHARED_HOUSEHOLD_DOC_ID = 'hh_family_ledger_main';
 export const DEFAULT_HOUSEHOLD_DOC_ID = LOCAL_HOUSEHOLD_ID;
 
 const CLOUD_HOUSEHOLD_PREFIX = 'hh_';
@@ -30,32 +29,7 @@ export function isLocalHouseholdId(value: string | null | undefined): boolean {
   return normalizeLocalHouseholdId(value) === LOCAL_HOUSEHOLD_ID;
 }
 
-export function isReservedCloudHouseholdId(value: string | null | undefined): boolean {
-  const clean = value?.trim();
-  return !clean || clean === LOCAL_HOUSEHOLD_ID || clean === LEGACY_SHARED_HOUSEHOLD_DOC_ID;
-}
-
 export function isValidCloudHouseholdId(value: string | null | undefined): boolean {
   const clean = value?.trim();
-  return Boolean(clean && clean.startsWith(CLOUD_HOUSEHOLD_PREFIX) && !isReservedCloudHouseholdId(clean));
-}
-
-export function normalizeHouseholdEntity<T extends { id: string; created_by: string }>(
-  household: T,
-  activeHouseholdDocId: string
-): T {
-  return {
-    ...household,
-    id: normalizeLocalHouseholdId(activeHouseholdDocId),
-  };
-}
-
-export function normalizeHouseholdScopedEntity<T extends { household_id: string }>(
-  entity: T,
-  activeHouseholdDocId: string
-): T {
-  return {
-    ...entity,
-    household_id: normalizeLocalHouseholdId(activeHouseholdDocId),
-  };
+  return Boolean(clean && clean.startsWith(CLOUD_HOUSEHOLD_PREFIX) && clean !== LOCAL_HOUSEHOLD_ID);
 }
