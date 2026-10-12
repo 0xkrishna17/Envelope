@@ -1,8 +1,6 @@
 import type { LedgerState } from '../store/types';
 import type { SyncResult } from '../sync/types';
 
-const SYNC_DEBUG_STORAGE_KEY = 'env_budget_sync_debug';
-
 export type SyncDebugDetails = Record<string, string | number | boolean | null | undefined>;
 
 function isBrowserDebugEnabled(): boolean {
@@ -10,7 +8,7 @@ function isBrowserDebugEnabled(): boolean {
 
   try {
     const params = new URLSearchParams(window.location.search);
-    return params.get('syncDebug') === '1' || window.localStorage.getItem(SYNC_DEBUG_STORAGE_KEY) === 'true';
+    return params.get('syncDebug') === '1';
   } catch {
     return false;
   }

@@ -77,8 +77,8 @@ export function deriveSyncStatusView(input: SyncStatusInput): SyncStatusView {
   if (!input.isOnline) {
     return {
       mode: 'offline',
-      label: input.pendingCount > 0 ? `Offline — ${input.pendingCount} change${input.pendingCount === 1 ? '' : 's'} saved on this device` : 'Offline',
-      detail: 'Changes will sync when this device is back online.',
+      label: 'Cloud unavailable',
+      detail: 'Changes are blocked while this device is offline. Reconnect and try again.',
       isCloudBacked: true,
       isCurrent: input.pendingCount === 0,
       canManualSync: false,
@@ -123,8 +123,8 @@ export function deriveSyncStatusView(input: SyncStatusInput): SyncStatusView {
   if (input.pendingCount > 0) {
     return {
       mode: 'pending_changes',
-      label: `${input.pendingCount} pending change${input.pendingCount === 1 ? '' : 's'}`,
-      detail: 'These changes are saved locally and waiting for cloud sync.',
+      label: `${input.pendingCount} cloud change${input.pendingCount === 1 ? '' : 's'} pending verification`,
+      detail: 'Refresh cloud sync before making more changes.',
       isCloudBacked: true,
       isCurrent: false,
       canManualSync: true,

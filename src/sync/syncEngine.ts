@@ -54,7 +54,7 @@ export async function loadHouseholdOnce(params: {
   dispatch: Dispatch<UnknownAction>;
   userUid?: string;
   storage?: Pick<Storage, 'setItem'>;
-}): Promise<SyncResult> {
+}): Promise<SyncResult & { household?: HouseholdRootDocument }> {
   const firestore = getFirestore();
   if (!firestore) return syncFailure('network', 'Firestore is not available in this environment.');
 
@@ -91,7 +91,10 @@ export async function loadHouseholdOnce(params: {
       allowedEmailCount: root.allowed_emails?.length || 0,
     });
 
-    return syncSuccess(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), root.sync_version || 0);
+    return {
+      ...syncSuccess(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), root.sync_version || 0),
+      household: root,
+    };
   } catch (err) {
     logSyncDebug('event root load failed', {
       householdId: maskIdentifier(householdDocId),

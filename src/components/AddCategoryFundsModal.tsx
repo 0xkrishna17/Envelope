@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { getMemberDisplayName } from '../utils/memberDisplay';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import {
   ArrowLeft,
@@ -37,6 +38,15 @@ const TOPUP_SOURCES = [
   { id: 'Manual Top-Up', label: 'Other Top-Up', icon: PlusCircle, color: '#78716C' },
 ];
 
+export function createAddFundsInitializationKey(
+  isOpen: boolean,
+  initialCategoryId?: string,
+  initialAmountRupees?: number
+): string | null {
+  if (!isOpen) return null;
+  return `${initialCategoryId || ''}:${initialAmountRupees ?? ''}`;
+}
+
 export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
   isOpen = true,
   onClose,
@@ -57,6 +67,8 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
     moveEnvelopeFunds,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isPending: isAddingFunds, run: runAddFunds } = usePendingAction('funds:add');
+  const { isPending: isMovingSurplus, run: runMoveSurplus } = usePendingAction('funds:move');
 
   // Active envelopes excluding archived and deleted
   const activeEnvelopes = useMemo(() => {
@@ -82,32 +94,39 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
   const [note, setNote] = useState<string>('');
   const [loggedByUserId, setLoggedByUserId] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const lastInitializationKeyRef = useRef<string | null>(null);
+  const initializationKey = createAddFundsInitializationKey(isOpen, initialCategoryId, initialAmountRupees);
 
   // Initialize or reset when opened
   useEffect(() => {
-    if (isOpen) {
-      const today = getTodayDateInputValue();
-      setDate(today);
-
-      const isInitUnallocated = initialCategoryId && unallocatedCat && initialCategoryId === unallocatedCat.id;
-
-      // If initial was unallocated envelope, user wants to add money FROM surplus into an envelope!
-      const targetCatId = isInitUnallocated
-        ? (activeEnvelopes.find(c => !c.is_unallocated)?.id || activeEnvelopes[0]?.id || '')
-        : (initialCategoryId && activeEnvelopes.some(c => c.id === initialCategoryId)
-            ? initialCategoryId
-            : (activeEnvelopes[0]?.id || ''));
-      setSelectedCategoryId(targetCatId);
-
-      setAmountRupees(initialAmountRupees ? String(initialAmountRupees) : '');
-      setSelectedSource(isInitUnallocated ? 'Unallocated Surplus' : 'Gift / Family');
-      setNote('');
-      setLoggedByUserId(activeMember?.user_id || members[0]?.user_id || '');
-      setIsSourceMenuOpen(false);
-      setIsLoggedByMenuOpen(false);
-      setErrorMessage(null);
+    if (!initializationKey) {
+      lastInitializationKeyRef.current = null;
+      return;
     }
-  }, [isOpen, initialCategoryId, initialAmountRupees, activeEnvelopes, activeMember, members, unallocatedCat]);
+    if (lastInitializationKeyRef.current === initializationKey) return;
+
+    lastInitializationKeyRef.current = initializationKey;
+    const today = getTodayDateInputValue();
+    setDate(today);
+
+    const isInitUnallocated = initialCategoryId && unallocatedCat && initialCategoryId === unallocatedCat.id;
+
+    // If initial was unallocated envelope, user wants to add money FROM surplus into an envelope!
+    const targetCatId = isInitUnallocated
+      ? (activeEnvelopes.find(c => !c.is_unallocated)?.id || activeEnvelopes[0]?.id || '')
+      : (initialCategoryId && activeEnvelopes.some(c => c.id === initialCategoryId)
+          ? initialCategoryId
+          : (activeEnvelopes[0]?.id || ''));
+    setSelectedCategoryId(targetCatId);
+
+    setAmountRupees(initialAmountRupees ? String(initialAmountRupees) : '');
+    setSelectedSource(isInitUnallocated ? 'Unallocated Surplus' : 'Gift / Family');
+    setNote('');
+    setLoggedByUserId(activeMember?.user_id || members[0]?.user_id || '');
+    setIsSourceMenuOpen(false);
+    setIsLoggedByMenuOpen(false);
+    setErrorMessage(null);
+  }, [initializationKey, initialCategoryId, initialAmountRupees, activeEnvelopes, activeMember, members, unallocatedCat]);
 
   const selectedCategory = useMemo(() => {
     return categories.find(c => c.id === selectedCategoryId);
@@ -140,7 +159,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
     setErrorMessage(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -168,13 +187,13 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
         return;
       }
 
-      const res = moveEnvelopeFunds({
+      const res = await runMoveSurplus('Moving surplus to envelope...', () => moveEnvelopeFunds({
         fromCategoryId: unallocatedCat.id,
         toCategoryId: selectedCategoryId,
         amountPaise: parsedAmountPaise,
         date: clampDateInputToToday(date),
         note: note.trim() || 'Funded from Unallocated Surplus',
-      });
+      }));
 
       if (!res.success) {
         setErrorMessage(res.error || 'Failed to allocate funds from surplus.');
@@ -186,7 +205,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
       return;
     }
 
-    const res = addCategoryFunds({
+    const res = await runAddFunds('Adding funds to envelope...', () => addCategoryFunds({
       categoryId: selectedCategoryId,
       amountPaise: parsedAmountPaise,
       source: selectedSource,
@@ -195,7 +214,7 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
       depositHolding: resolvedDepositHolding,
       transferred: true,
       loggedByUserId: loggedByUserId || activeMember.user_id,
-    });
+    }));
 
     if (!res.success) {
       setErrorMessage(res.error || 'Failed to add funds to envelope.');
@@ -216,10 +235,10 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-add-funds-modal-btn"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#2C523B]/10 dark:bg-[#2C523B]/30 text-[#2C523B] dark:text-[#A8D1B7] flex items-center justify-center shrink-0">
@@ -553,12 +572,13 @@ export const AddFundsScreen: React.FC<AddCategoryFundsModalProps> = ({
             <button
               type="submit"
               id="confirm-add-funds-btn"
-              disabled={parsedAmountPaise <= 0 || !selectedCategoryId}
-              className="px-5 py-2.5 rounded-xl bg-[#2C523B] hover:bg-[#23422F] text-white font-semibold text-xs shadow-xs disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 cursor-pointer"
+              disabled={isAddingFunds || isMovingSurplus || parsedAmountPaise <= 0 || !selectedCategoryId}
+              aria-busy={isAddingFunds || isMovingSurplus}
+              className="px-5 py-2.5 rounded-xl bg-[#2C523B] hover:bg-[#23422F] text-white font-semibold text-xs shadow-xs disabled:opacity-50 disabled:cursor-wait transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>
-                Add {parsedAmountPaise > 0 ? formatPaise(parsedAmountPaise) : 'Funds'} to Envelope
+                {isAddingFunds || isMovingSurplus ? 'Saving...' : `Add ${parsedAmountPaise > 0 ? formatPaise(parsedAmountPaise) : 'Funds'} to Envelope`}
               </span>
             </button>
           </div>

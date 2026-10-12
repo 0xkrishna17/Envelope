@@ -5,6 +5,7 @@ import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 import { ArrowLeft, X, Trash2, Check, Lock, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface EditTransactionModalProps {
@@ -32,6 +33,9 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
     members,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isPending: isSavingTransaction, run: runSaveTransaction } = usePendingAction('transaction:update');
+  const { isPending: isDeletingTransaction, run: runDeleteTransaction } = usePendingAction('transaction:delete');
+  const { isPending: isSavingCorrection, run: runSaveCorrection } = usePendingAction('transaction:correction');
 
   const [amountStr, setAmountStr] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -39,6 +43,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
   const [date, setDate] = useState<string>('');
   const [note, setNote] = useState<string>('');
   const [showCorrectionDialog, setShowCorrectionDialog] = useState<boolean>(false);
+  const [showReverseConfirm, setShowReverseConfirm] = useState<boolean>(false);
   const [correctionDifference, setCorrectionDifference] = useState<string>('');
   const [correctionNote, setCorrectionNote] = useState<string>('');
 
@@ -50,6 +55,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
       setDate(transaction.date);
       setNote(transaction.note || '');
       setShowCorrectionDialog(false);
+      setShowReverseConfirm(false);
       setCorrectionDifference('');
       setCorrectionNote('');
     }
@@ -61,53 +67,70 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
   const member = members.find(m => m.user_id === transaction.logged_by_user_id);
   const currentCategory = activeCategories.find(c => c.id === transaction.category_id);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!transaction) return;
 
-    if (isLocked) {
-      // Amount and category are locked, only date and note can be updated
-      updateTransaction(transaction.id, {
-        date: clampDateInputToToday(date),
-        note: note.trim() || undefined,
-      });
-    } else {
-      const paise = rupeesToPaise(amountStr);
-      if (!paise || !categoryId) return;
-      const isNegative = transaction.amount < 0;
-      const finalPaise = isNegative ? -Math.abs(paise) : Math.abs(paise);
+    const result = await runSaveTransaction('Saving transaction to cloud...', async () => isLocked
+      ? updateTransaction(transaction.id, {
+          date: clampDateInputToToday(date),
+          note: note.trim() || undefined,
+        })
+      : await (async () => {
+          const paise = rupeesToPaise(amountStr);
+          if (!paise || !categoryId) return { success: false, error: 'Enter a valid amount and envelope.' };
+          const isNegative = transaction.amount < 0;
+          const finalPaise = isNegative ? -Math.abs(paise) : Math.abs(paise);
 
-      updateTransaction(transaction.id, {
-        amount: finalPaise,
-        category_id: categoryId,
-        payment_method: paymentMethod,
-        date: clampDateInputToToday(date),
-        note: note.trim() || undefined,
-      });
+          return updateTransaction(transaction.id, {
+            amount: finalPaise,
+            category_id: categoryId,
+            payment_method: paymentMethod,
+            date: clampDateInputToToday(date),
+            note: note.trim() || undefined,
+          });
+        })());
+
+    if (!result.success) {
+      feedback.error(result.error);
+      return;
     }
 
     handleBack();
     feedback.transactionUpdated();
   };
 
-  const handleDelete = () => {
+  const handleRequestReverse = () => {
     if (isLocked) {
       alert('This transaction has already been partially or fully reconciled in a credit card payback. You cannot delete it directly. Please use "Log a correction" to offset the amount.');
       return;
     }
-    if (window.confirm('Reverse this transaction? The original TID stays in history and a new reversal entry will offset its amount.')) {
-      deleteTransaction(transaction.id);
-      handleBack();
-      feedback.entryReversed();
-    }
+    setShowReverseConfirm(true);
   };
 
-  const handleCreateCorrection = (e: React.FormEvent) => {
+  const handleConfirmReverse = async () => {
+    if (!transaction) return;
+    const result = await runDeleteTransaction('Reversing transaction in cloud...', () => deleteTransaction(transaction.id));
+    if (!result.success) {
+      feedback.error(result.error);
+      return;
+    }
+    handleBack();
+    feedback.entryReversed();
+  };
+
+  const handleCreateCorrection = async (e: React.FormEvent) => {
     e.preventDefault();
     const diffPaise = rupeesToPaise(correctionDifference);
     if (!diffPaise) return;
 
-    logCorrection(transaction, diffPaise, correctionNote || `Correction for tx #${transaction.id.slice(-4)}`);
+    const result = await runSaveCorrection('Saving correction to cloud...', () =>
+      logCorrection(transaction, diffPaise, correctionNote || `Correction for tx #${transaction.id.slice(-4)}`)
+    );
+    if (!result.success) {
+      feedback.error(result.error);
+      return;
+    }
     handleBack();
     feedback.correctionLogged();
   };
@@ -120,10 +143,10 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-edit-tx-modal"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
@@ -201,9 +224,11 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
               <button
                 type="submit"
                 id="save-correction-btn"
-                className="flex-1 py-2.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold"
+                disabled={isSavingCorrection}
+                aria-busy={isSavingCorrection}
+                className="flex-1 py-2.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold disabled:opacity-50 disabled:cursor-wait"
               >
-                Log Correction
+                {isSavingCorrection ? 'Saving Correction...' : 'Log Correction'}
               </button>
             </div>
           </form>
@@ -305,10 +330,12 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                 {!isLocked && (
                   <button
                     type="button"
-                    onClick={handleDelete}
+                    onClick={handleRequestReverse}
+                    disabled={isDeletingTransaction}
+                    aria-busy={isDeletingTransaction}
                     id="delete-tx-btn"
-                    className="p-3 rounded-xl border border-[#E8C5BC] text-[#87341D] hover:bg-[#F9ECE8] transition-colors"
-                    title="Delete Entry (Soft Delete)"
+                    className="p-3 rounded-xl border border-[#E8C5BC] text-[#87341D] hover:bg-[#F9ECE8] transition-colors disabled:opacity-50 disabled:cursor-wait"
+                    title={isDeletingTransaction ? 'Reversing...' : 'Delete Entry (Soft Delete)'}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -317,12 +344,48 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                 <button
                   type="submit"
                   id="update-tx-btn"
-                  className="flex-1 py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-xs flex items-center justify-center gap-1.5 shadow-xs"
+                  disabled={isSavingTransaction}
+                  aria-busy={isSavingTransaction}
+                  className="flex-1 py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-xs flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50 disabled:cursor-wait"
                 >
                   <Check className="w-4 h-4" />
-                  <span>Save as New Adjustment</span>
+                  <span>{isSavingTransaction ? 'Saving...' : 'Save as New Adjustment'}</span>
                 </button>
               </div>
+
+              {showReverseConfirm && !isLocked && (
+                <div className="p-3 rounded-xl border border-[#E8C5BC] bg-[#F9ECE8] dark:bg-[#331D16] dark:border-[#5E261B] flex flex-col gap-2">
+                  <div className="flex items-start gap-2 text-[#87341D] dark:text-[#F3B3A2]">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold">Reverse this transaction?</p>
+                      <p className="text-[11px] mt-0.5">
+                        The original TID stays in history and a new reversal entry will offset its amount.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowReverseConfirm(false)}
+                      disabled={isDeletingTransaction}
+                      className="px-3 py-1.5 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-medium text-[#78716C] disabled:opacity-50 disabled:cursor-wait"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleConfirmReverse}
+                      disabled={isDeletingTransaction}
+                      aria-busy={isDeletingTransaction}
+                      id="confirm-reverse-tx-btn"
+                      className="px-3 py-1.5 rounded-lg bg-[#87341D] text-white text-xs font-semibold shadow-xs disabled:opacity-50 disabled:cursor-wait"
+                    >
+                      {isDeletingTransaction ? 'Reversing...' : 'Add Reversal'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {isLocked && (
                 <button
@@ -332,7 +395,7 @@ export const EditTransactionScreen: React.FC<EditTransactionModalProps> = ({
                   className="w-full py-2.5 px-3 rounded-xl border border-[#AF7832] text-[#AF7832] text-xs font-semibold hover:bg-[#F7EFE4] transition-colors flex items-center justify-center gap-1.5"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Log a Correction for this Spend</span>
+                  <span>Log a Correction Instead</span>
                 </button>
               )}
             </div>

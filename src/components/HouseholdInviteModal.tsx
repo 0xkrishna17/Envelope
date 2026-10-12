@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
-import { Invite, Membership } from '../types';
+import { useApiLoading } from '../context/ApiLoadingContext';
+import { HouseholdInvitation, Membership } from '../types';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
 import { X, Copy, Check, Users, Clock, Share2, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 
@@ -17,16 +18,17 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
     household,
     members,
     activeMember,
-    invites,
-    createInvite,
-    revokeInvite,
+    sentInvitations,
+    addAllowedEmail,
+    revokeInvitation,
     setActiveMemberId,
     updateMemberName,
     deleteMember,
   } = useBudget();
+  const { isActionPending, runAction } = useApiLoading();
 
-  const [activeInvite, setActiveInvite] = useState<Invite | null>(() => {
-    return invites.find(i => !i.used_at && new Date(i.expires_at) > new Date()) || null;
+  const [activeInvite, setActiveInvite] = useState<HouseholdInvitation | null>(() => {
+    return sentInvitations.find(invitation => invitation.status === 'pending') || null;
   });
 
   const [copied, setCopied] = useState<boolean>(false);
@@ -42,16 +44,20 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
     setEditNameVal(currentName);
   };
 
-  const handleSaveEdit = (userId: string) => {
+  const handleSaveEdit = async (userId: string) => {
     if (editNameVal.trim()) {
-      updateMemberName(userId, editNameVal.trim());
+      const result = await runAction(`household-member:update:${userId}`, 'Saving member name...', () => updateMemberName(userId, editNameVal.trim()));
+      if (!result.ok) {
+        setDeleteError(result.message);
+        return;
+      }
     }
     setEditingUserId(null);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!memberToDelete) return;
-    const res = deleteMember(memberToDelete.user_id);
+    const res = await runAction(`household-member:delete:${memberToDelete.user_id}`, 'Deleting household member...', () => deleteMember(memberToDelete.user_id));
     if (!res.success) {
       setDeleteError(res.error || 'Failed to delete member');
     } else {
@@ -60,12 +66,18 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
     }
   };
 
-  const handleGenerateCode = () => {
-    const inv = createInvite();
-    setActiveInvite(inv);
+  const handleGenerateCode = async () => {
+    const inviteeEmail = window.prompt('Enter the Google email to invite');
+    if (!inviteeEmail) return;
+    const result = await addAllowedEmail(inviteeEmail);
+    if (!result.ok) {
+      setDeleteError(result.message);
+      return;
+    }
+    setActiveInvite(sentInvitations.find(invitation => invitation.status === 'pending') || null);
   };
 
-  const getPublicShareUrl = (code?: string) => {
+  const getPublicShareUrl = () => {
     let origin = window.location.origin;
     // In AI Studio development, origin is 'ais-dev-...'. This is private to the developer and returns 401 Unauthorized to anyone else!
     // Replacing 'ais-dev-' with 'ais-pre-' generates the public shared URL that works for partners.
@@ -74,11 +86,10 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
     }
     const params = new URLSearchParams();
     if (household?.id) params.set('household', household.id);
-    if (code) params.set('code', code);
     return `${origin}/?${params.toString()}`;
   };
 
-  const inviteUrl = activeInvite ? getPublicShareUrl(activeInvite.code) : '';
+  const inviteUrl = activeInvite ? getPublicShareUrl() : '';
 
   const copyToClipboard = () => {
     if (!inviteUrl) return;
@@ -132,10 +143,7 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
                   className="flex items-center justify-between p-2.5 rounded-xl border border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/30 dark:bg-[#28221D]/30"
                 >
                   <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                    <span
-                      className="w-7 h-7 rounded-full text-white text-xs font-semibold flex items-center justify-center shadow-xs shrink-0"
-                      style={{ backgroundColor: member.avatar_color }}
-                    >
+                    <span className="w-7 h-7 rounded-full bg-[#4E785E] text-white text-xs font-semibold flex items-center justify-center shadow-xs shrink-0">
                       {member.name.charAt(0)}
                     </span>
 
@@ -287,8 +295,8 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
             {activeInvite ? (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 bg-[#FAF7F2] dark:bg-[#1A1714] p-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F]">
-                  <span className="text-xs font-mono font-semibold px-2 py-0.5 bg-[#EFEAE1] dark:bg-[#28221D] rounded">
-                    {activeInvite.code}
+                  <span className="text-xs font-mono font-semibold px-2 py-0.5 bg-[#EFEAE1] dark:bg-[#28221D] rounded truncate max-w-[8rem]">
+                    {activeInvite.invitee_email}
                   </span>
                   <input
                     type="text"
@@ -326,8 +334,8 @@ export const HouseholdInviteModal: React.FC<HouseholdInviteModalProps> = ({
                 <div className="flex items-center justify-between text-[10px] text-[#78716C]">
                   <span>Valid for 48 hours</span>
                   <button
-                    onClick={() => {
-                      revokeInvite(activeInvite.id);
+                    onClick={async () => {
+                      await revokeInvitation(activeInvite.id);
                       setActiveInvite(null);
                     }}
                     className="text-[#B85D43] hover:underline cursor-pointer"

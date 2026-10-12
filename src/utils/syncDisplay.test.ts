@@ -16,10 +16,10 @@ describe('sync display copy', () => {
     expect(formatLastCloudSync('03:45 PM')).toBe('03:45 PM');
   });
 
-  it('reports local-only state before a cloud household is verified', () => {
+  it('reports sign-in-required state before a cloud household is verified', () => {
     expect(getCloudSyncBadgeStatus('synced', null, 'local_only')).toBe('local_only');
-    expect(getCloudSyncHeadline('local_only')).toBe('Local Ledger Only');
-    expect(getCloudSyncDescription('local_only')).toContain('create or join a cloud household');
+    expect(getCloudSyncHeadline('local_only')).toBe('Sign In Required');
+    expect(getCloudSyncDescription('local_only')).toContain('Sign in with an authorized Google account');
   });
 
   it('reports access-denied state before raw sync status details', () => {
@@ -45,9 +45,12 @@ describe('sync display copy', () => {
     expect(getCloudSyncHeadline('synced')).toBe('Cloud Sync Connected');
   });
 
-  it('uses status-specific connection descriptions', () => {
+  it('uses cloud-first status-specific connection descriptions', () => {
     expect(getCloudSyncBadgeStatus('syncing', null, 'verified')).toBe('syncing');
-    expect(getCloudSyncDescription('offline')).toContain('saved locally');
+    expect(getCloudSyncHeadline('offline')).toBe('Cloud Unavailable');
+    expect(getCloudSyncDescription('offline')).toContain('Changes were not saved');
+    expect(getCloudSyncDescription('offline')).not.toContain('saved locally');
     expect(getCloudSyncDescription('error')).toContain('could not confirm');
+    expect(getCloudSyncDescription('error')).not.toContain('local ledger');
   });
 });

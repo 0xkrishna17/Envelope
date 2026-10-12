@@ -205,6 +205,50 @@ describe('Unified Ledger Processing Unit Tests', () => {
     expect(entries[4].id).toBe('sal_sal1');
   });
 
+  it('orders by newest date first and latest entry first within each date', () => {
+    const sameDayTransactions: Transaction[] = [
+      {
+        ...transactions[0],
+        id: 'late_same_day',
+        date: '2026-09-08',
+        created_at: '2026-09-08T18:30:00Z',
+        updated_at: '2026-09-08T18:30:00Z',
+      },
+      {
+        ...transactions[0],
+        id: 'early_same_day',
+        date: '2026-09-08',
+        created_at: '2026-09-08T09:15:00Z',
+        updated_at: '2026-09-08T09:15:00Z',
+      },
+      {
+        ...transactions[0],
+        id: 'newer_date',
+        date: '2026-09-09',
+        created_at: '2026-09-09T07:00:00Z',
+        updated_at: '2026-09-09T07:00:00Z',
+      },
+    ];
+
+    const { entries } = buildUnifiedLedger(
+      sameDayTransactions,
+      [],
+      [],
+      [],
+      [],
+      categories,
+      members,
+      { timeframe: 'all' },
+      []
+    );
+
+    expect(entries.map(entry => entry.id)).toEqual([
+      'tx_newer_date',
+      'tx_late_same_day',
+      'tx_early_same_day',
+    ]);
+  });
+
   it('correctly filters by typeFilter (e.g. category_topup only)', () => {
     const { entries } = buildUnifiedLedger(
       transactions,

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useBudget } from '../context/BudgetContext';
-import { useApiLoading } from '../context/ApiLoadingContext';
+import { useApiLoading, usePendingAction } from '../context/ApiLoadingContext';
+import { useActionFeedback } from '../hooks/useActionFeedback';
 import { ParsedVoiceIntent } from '../types';
 import { formatPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
@@ -51,6 +52,8 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
     addCategoryFunds,
   } = useBudget();
   const { startApiCall } = useApiLoading();
+  const feedback = useActionFeedback();
+  const { isPending: isSavingVoiceIntent, run: runSaveVoiceIntent } = usePendingAction('voice:save-intent');
 
   const [isListening, setIsListening] = useState<boolean>(false);
   const [transcript, setTranscript] = useState<string>('');
@@ -295,20 +298,24 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
     );
   };
 
-  const handleConfirmIntent = () => {
+  const handleConfirmIntent = async () => {
     if (!parsedResult) return;
 
     if (parsedResult.intent === 'add_transaction') {
       const matchedCat = findCategoryByName(parsedResult.categoryName) || activeCategories[0];
       if (!matchedCat || parsedResult.amountInPaise <= 0) return;
 
-      addTransaction({
+      const result = await runSaveVoiceIntent('Saving voice entry to cloud...', () => addTransaction({
         category_id: matchedCat.id,
         amount: parsedResult.amountInPaise,
         date: new Date().toISOString().split('T')[0],
         payment_method: parsedResult.paymentMethod || 'credit_card',
         note: parsedResult.note || transcript,
-      });
+      }));
+      if (!result.success) {
+        feedback.error(result.error);
+        return;
+      }
       handleBack();
     } else if (parsedResult.intent === 'mark_salary_arrived') {
       handleBack();
@@ -316,7 +323,13 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
     } else if (parsedResult.intent === 'mark_reconciled') {
       const matchedCat = findCategoryByName(parsedResult.categoryName);
       if (matchedCat && parsedResult.amountInPaise > 0) {
-        reconcileCategoryCardSpend(matchedCat.id, parsedResult.amountInPaise, new Date().toISOString().split('T')[0]);
+        const result = await runSaveVoiceIntent('Saving voice entry to cloud...', () =>
+          reconcileCategoryCardSpend(matchedCat.id, parsedResult.amountInPaise, new Date().toISOString().split('T')[0])
+        );
+        if (!result.success) {
+          feedback.error(result.error);
+          return;
+        }
         handleBack();
       } else {
         handleBack();
@@ -326,12 +339,16 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
       const fromCat = findCategoryByName(parsedResult.fromCategoryName);
       const toCat = findCategoryByName(parsedResult.toCategoryName);
       if (fromCat && toCat && parsedResult.amountInPaise > 0) {
-        moveEnvelopeFunds({
+        const result = await runSaveVoiceIntent('Saving voice entry to cloud...', () => moveEnvelopeFunds({
           fromCategoryId: fromCat.id,
           toCategoryId: toCat.id,
           amountPaise: parsedResult.amountInPaise,
           note: parsedResult.note || transcript,
-        });
+        }));
+        if (!result.success) {
+          feedback.error(result.error);
+          return;
+        }
         handleBack();
       } else {
         handleBack();
@@ -343,7 +360,7 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
       const matchedCat = findCategoryByName(parsedResult.categoryName) || activeCategories[0];
       if (!matchedCat || parsedResult.amountInPaise <= 0) return;
 
-      addCategoryFunds({
+      const result = await runSaveVoiceIntent('Saving voice entry to cloud...', () => addCategoryFunds({
         categoryId: matchedCat.id,
         amountPaise: parsedResult.amountInPaise,
         source: 'Voice Top-Up',
@@ -351,7 +368,11 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
         depositHolding: 'secondary_account',
         date: new Date().toISOString().split('T')[0],
         loggedByUserId: activeMember.user_id,
-      });
+      }));
+      if (!result.success) {
+        feedback.error(result.error);
+        return;
+      }
       handleBack();
     } else {
       // Query balance or other
@@ -377,10 +398,10 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-voice-modal"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#B85D43]/20 text-[#B85D43] flex items-center justify-center shadow-xs">
@@ -761,11 +782,13 @@ export const VoiceInputScreen: React.FC<VoiceInputModalProps> = ({
                   <button
                     type="button"
                     onClick={handleConfirmIntent}
+                    disabled={isSavingVoiceIntent}
+                    aria-busy={isSavingVoiceIntent}
                     id="confirm-voice-intent-btn"
-                    className="flex-1 py-2 rounded-xl bg-[#2C523B] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                    className="flex-1 py-2 rounded-xl bg-[#2C523B] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-wait"
                   >
                     <Check className="w-3.5 h-3.5" />
-                    <span>Confirm & Save</span>
+                    <span>{isSavingVoiceIntent ? 'Saving to cloud...' : 'Confirm & Save'}</span>
                   </button>
                 </div>
               </div>

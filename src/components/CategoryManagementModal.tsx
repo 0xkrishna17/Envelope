@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useBudget } from '../context/BudgetContext';
+import { useApiLoading, usePendingAction } from '../context/ApiLoadingContext';
 import { Category } from '../types';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import {
@@ -7,9 +8,13 @@ import {
   AVAILABLE_ICONS,
   renderCategoryIcon,
 } from '../utils/categoryTheme';
-import { Plus, Archive, ArchiveRestore, Check, AlertCircle, Edit2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Plus, Archive, ArchiveRestore, Check, AlertCircle, Edit2, ShieldAlert } from 'lucide-react';
 
-export const CategoryManagement: React.FC = () => {
+interface CategoryManagementProps {
+  onBack?: () => void;
+}
+
+export const CategoryManagement: React.FC<CategoryManagementProps> = ({ onBack }) => {
   const {
     categories,
     createCategory,
@@ -29,6 +34,8 @@ export const CategoryManagement: React.FC = () => {
   const [color, setColor] = useState<string>(MUTED_COLOR_PALETTES[0].hex);
   const [targetRupees, setTargetRupees] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { isPending: isSavingCategory, run: runSaveCategory } = usePendingAction('category:save');
+  const { isActionPending, runAction } = useApiLoading();
 
   const startCreate = () => {
     setName('');
@@ -65,26 +72,26 @@ export const CategoryManagement: React.FC = () => {
     }, 60);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
     const targetPaise = targetRupees ? rupeesToPaise(targetRupees) : undefined;
 
     if (editingCategory) {
-      const res = updateCategory(editingCategory.id, {
+      const res = await runSaveCategory('Saving envelope to cloud...', () => updateCategory(editingCategory.id, {
         name,
         icon,
         color,
         target_amount: targetPaise,
-      });
+      }));
       if (!res.success) {
         setErrorMessage(res.error || 'Failed to update category');
         return;
       }
       setEditingCategory(null);
     } else {
-      const res = createCategory(name, icon, color, targetPaise);
+      const res = await runSaveCategory('Saving envelope to cloud...', () => createCategory(name, icon, color, targetPaise));
       if (!res.success) {
         setErrorMessage(res.error || 'Failed to create category');
         return;
@@ -97,7 +104,16 @@ export const CategoryManagement: React.FC = () => {
     <div className="flex flex-col gap-4 animate-in fade-in pb-28 sm:pb-20">
       {/* Header card with create button */}
       <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            id="back-category-management-btn"
+            aria-label="Back to envelopes"
+            className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          >
+            <ArrowLeft className="w-4 h-4 text-[#78716C]" />
+          </button>
           <h2 className="text-base font-semibold text-[#1F1B16] dark:text-[#EDE8E1]">
             Manage Envelope Categories
           </h2>
@@ -164,7 +180,7 @@ export const CategoryManagement: React.FC = () => {
 
             <div>
               <label className="text-xs font-medium text-[#78716C] block mb-1">
-                Target Monthly Amount (Optional, purely informational)
+                Target (Optional, purely informational)
               </label>
               <div className="relative flex items-center">
                 <span className="absolute left-3 text-xs text-[#78716C]">₹</span>
@@ -247,9 +263,11 @@ export const CategoryManagement: React.FC = () => {
             <button
               type="submit"
               id="save-category-btn"
-              className="px-5 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs"
+              disabled={isSavingCategory}
+              aria-busy={isSavingCategory}
+              className="px-5 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs disabled:opacity-50 disabled:cursor-wait"
             >
-              {editingCategory ? 'Save Changes' : 'Create Envelope'}
+              {isSavingCategory ? 'Saving...' : editingCategory ? 'Save Changes' : 'Create Envelope'}
             </button>
           </div>
         </form>
@@ -322,7 +340,10 @@ export const CategoryManagement: React.FC = () => {
                 {!cat.is_unallocated && (
                   cat.is_archived ? (
                     <button
-                      onClick={() => unarchiveCategory(cat.id)}
+                      onClick={async () => {
+                        const result = await unarchiveCategory(cat.id);
+                        if (!result.ok) setErrorMessage(result.message);
+                      }}
                       id={`unarchive-cat-${cat.id}`}
                       className="h-10 min-h-10 min-w-10 px-2.5 rounded-lg border border-[#CADBCE] text-[#2C523B] text-xs font-medium hover:bg-[#EBF2ED] inline-grid grid-flow-col place-items-center gap-1"
                       title="Unarchive Envelope"
@@ -332,7 +353,10 @@ export const CategoryManagement: React.FC = () => {
                     </button>
                   ) : (
                     <button
-                      onClick={() => archiveCategory(cat.id)}
+                      onClick={async () => {
+                        const result = await archiveCategory(cat.id);
+                        if (!result.ok) setErrorMessage(result.message);
+                      }}
                       id={`archive-cat-${cat.id}`}
                       className="h-10 min-h-10 w-10 min-w-10 p-0 rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] text-[#78716C] hover:text-[#AF7832] transition-colors grid place-items-center"
                       title="Archive Envelope (Never deletes money or pending payback)"

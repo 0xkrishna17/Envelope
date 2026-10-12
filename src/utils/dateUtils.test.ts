@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clampDateInputToToday,
+  formatLedgerEntryTime,
   formatSelectedMonth,
   getSelectedMonthLabel,
   getTodayDateInputValue,
@@ -20,6 +21,13 @@ describe('Date & Month Formatting Utilities Unit Tests', () => {
       const res = parseYearMonth('');
       expect(typeof res.year).toBe('number');
       expect(typeof res.month).toBe('number');
+    });
+  });
+
+  describe('formatLedgerEntryTime', () => {
+    it('formats ISO timestamps as visible ledger times and tolerates invalid input', () => {
+      expect(formatLedgerEntryTime('2026-09-08T09:15:00Z')).toMatch(/^\d{2}:\d{2}\s?(am|pm)$/i);
+      expect(formatLedgerEntryTime('not-a-date')).toBe('Time not set');
     });
   });
 

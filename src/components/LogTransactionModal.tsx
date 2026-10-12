@@ -6,6 +6,7 @@ import { renderCategoryIcon } from '../utils/categoryTheme';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { getMemberDisplayName } from '../utils/memberDisplay';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 import {
   ArrowLeft,
   Calendar,
@@ -45,6 +46,7 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
     addTransaction,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isPending: isSavingTransaction, run: runSaveTransaction } = usePendingAction('transaction:add');
 
   const handleBack = () => {
     if (onBack) onBack();
@@ -113,20 +115,24 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const paise = rupeesToPaise(amountStr);
     if (!paise || !selectedCategoryId) return;
 
     const finalAmount = isRefund ? -Math.abs(paise) : Math.abs(paise);
 
-    addTransaction({
+    const result = await runSaveTransaction('Saving expense to cloud...', () => addTransaction({
       category_id: selectedCategoryId,
       amount: finalAmount,
       date: clampDateInputToToday(date),
       payment_method: paymentMethod,
       note: note.trim() || undefined,
-    });
+    }));
+    if (!result.success) {
+      feedback.error(result.error);
+      return;
+    }
 
     const selectedCategory = activeCategories.find(category => category.id === selectedCategoryId);
     handleBack();
@@ -143,10 +149,10 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-log-tx-modal"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#78716C] dark:text-[#A8A29E]">
@@ -209,34 +215,56 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-72 sm:max-h-40 overflow-y-auto pr-1">
-              {sortedCategories.map(cat => {
-                const isSelected = cat.id === selectedCategoryId;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setSelectedCategoryId(cat.id)}
-                    id={`cat-select-${cat.id}`}
-                    className={`min-h-20 sm:min-h-0 flex flex-col items-center justify-center p-3 sm:p-2 rounded-2xl sm:rounded-xl border text-center transition-all ${
-                      isSelected
-                        ? 'border-[#1F1B16] dark:border-[#EDE8E1] bg-[#FAF7F2] dark:bg-[#1A1714] shadow-xs'
-                        : 'border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
-                    }`}
-                  >
-                    <div
-                      className="w-9 h-9 sm:w-7 sm:h-7 rounded-xl sm:rounded-lg flex items-center justify-center text-white mb-1.5 sm:mb-1 shadow-xs"
-                      style={{ backgroundColor: cat.color }}
+            {preselectedCategoryId && selectedCategory && selectedCategory.id === preselectedCategoryId ? (
+              <div
+                id="locked-selected-expense-category-card"
+                className="flex items-center gap-3 p-3 rounded-xl border border-[#1F1B16] dark:border-[#EDE8E1] bg-[#FAF7F2] dark:bg-[#1A1714] shadow-xs"
+              >
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
+                  style={{ backgroundColor: selectedCategory.color }}
+                >
+                  {renderCategoryIcon(selectedCategory.icon, 'w-4 h-4')}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold truncate text-[#1F1B16] dark:text-[#EDE8E1] text-sm">
+                    {selectedCategory.name}
+                  </div>
+                  <div className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+                    Expense will be logged against this envelope.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-72 sm:max-h-40 overflow-y-auto pr-1">
+                {sortedCategories.map(cat => {
+                  const isSelected = cat.id === selectedCategoryId;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedCategoryId(cat.id)}
+                      id={`cat-select-${cat.id}`}
+                      className={`min-h-20 sm:min-h-0 flex flex-col items-center justify-center p-3 sm:p-2 rounded-2xl sm:rounded-xl border text-center transition-all ${
+                        isSelected
+                          ? 'border-[#1F1B16] dark:border-[#EDE8E1] bg-[#FAF7F2] dark:bg-[#1A1714] shadow-xs'
+                          : 'border-[#E8E3DA] dark:border-[#2D2823] bg-[#EFEAE1]/40 dark:bg-[#28221D]/40 hover:bg-[#EFEAE1] dark:hover:bg-[#28221D]'
+                      }`}
                     >
-                      {renderCategoryIcon(cat.icon, 'w-5 h-5 sm:w-4 sm:h-4')}
-                    </div>
-                    <span className="text-sm sm:text-[11px] font-medium leading-tight truncate w-full text-[#1F1B16] dark:text-[#EDE8E1]">
-                      {cat.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      <div
+                        className="w-9 h-9 sm:w-7 sm:h-7 rounded-xl sm:rounded-lg flex items-center justify-center text-white mb-1.5 sm:mb-1 shadow-xs"
+                        style={{ backgroundColor: cat.color }}
+                      >
+                        {renderCategoryIcon(cat.icon, 'w-5 h-5 sm:w-4 sm:h-4')}
+                      </div>
+                      <span className="text-sm sm:text-[11px] font-medium leading-tight truncate w-full text-[#1F1B16] dark:text-[#EDE8E1]">
+                        {cat.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Payment Method Segmented Pills (§4.2) */}
@@ -349,11 +377,12 @@ export const LogExpenseScreen: React.FC<LogTransactionModalProps> = ({
           <button
             type="submit"
             id="save-tx-btn"
-            disabled={!amountStr || !selectedCategoryId}
-            className="w-full mt-2 min-h-12 py-3 px-4 rounded-2xl sm:rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-semibold text-base sm:text-sm flex items-center justify-center gap-2 shadow-xs hover:opacity-95 disabled:opacity-40 transition-all cursor-pointer"
-          >
-            <Check className="w-5 h-5 sm:w-4 sm:h-4" />
-            <span>Save to Envelope (Instant)</span>
+            disabled={isSavingTransaction || !amountStr || !selectedCategoryId}
+            aria-busy={isSavingTransaction}
+            className="w-full mt-2 min-h-12 py-3 px-4 rounded-2xl sm:rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-semibold text-base sm:text-sm flex items-center justify-center gap-2 shadow-xs hover:opacity-95 disabled:opacity-40 disabled:cursor-wait transition-all cursor-pointer"
+            >
+            <Check className="w-5 h-5" />
+            {isSavingTransaction ? 'Saving...' : isRefund ? 'Log Refund' : 'Log Spend'}
           </button>
         </form>
       </div>

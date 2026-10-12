@@ -48,6 +48,25 @@ describe('firestoreEvents', () => {
     expect(firestoreDocumentToLedgerEvent(doc)).toEqual(event);
   });
 
+  it('strips nested undefined fields before Firestore writes', () => {
+    const eventWithUndefinedNote: Extract<LedgerEvent, { type: 'transaction.added' }> = {
+      ...event,
+      payload: {
+        transaction: {
+          ...event.payload.transaction,
+          note: undefined,
+        },
+      },
+    };
+
+    const doc = ledgerEventToFirestoreDocument(eventWithUndefinedNote);
+
+    expect(doc.payload).toMatchObject({
+      transaction: expect.not.objectContaining({ note: expect.anything() }),
+    });
+    expect(JSON.stringify(doc)).not.toContain('note');
+  });
+
   it('rejects malformed event documents', () => {
     expect(firestoreDocumentToLedgerEvent({ id: 'evt_1' })).toBeNull();
     expect(firestoreDocumentToLedgerEvent({

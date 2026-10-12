@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getBrowserNotificationPermission,
   requestBrowserNotificationPermission,
@@ -6,49 +6,32 @@ import {
 } from './browserNotifications';
 
 const originalWindow = globalThis.window;
-const originalNavigator = globalThis.navigator;
 
 function setWindowNotification(notificationCtor: unknown) {
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value: {
       Notification: notificationCtor,
-      clearTimeout,
-      setTimeout,
     },
   });
 }
 
-function setNavigatorServiceWorker(serviceWorker: unknown) {
-  Object.defineProperty(globalThis, 'navigator', {
-    configurable: true,
-    value: {
-      serviceWorker,
-    },
-  });
-}
-
-function restoreGlobalProperty(name: 'window' | 'navigator', value: unknown) {
+function restoreWindow(value: typeof originalWindow) {
   if (value === undefined) {
-    Reflect.deleteProperty(globalThis, name);
+    Reflect.deleteProperty(globalThis, 'window');
     return;
   }
 
-  Object.defineProperty(globalThis, name, {
+  Object.defineProperty(globalThis, 'window', {
     configurable: true,
     value,
   });
 }
 
 describe('browser notification helpers', () => {
-  beforeEach(() => {
-    setNavigatorServiceWorker(undefined);
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
-    restoreGlobalProperty('window', originalWindow);
-    restoreGlobalProperty('navigator', originalNavigator);
+    restoreWindow(originalWindow);
   });
 
   it('reports unsupported when the Notification API is unavailable', () => {
@@ -65,38 +48,10 @@ describe('browser notification helpers', () => {
     expect(requestPermission).toHaveBeenCalledOnce();
   });
 
-  it('shows test reminders through the service worker when permission is granted', async () => {
-    const showNotification = vi.fn().mockResolvedValue(undefined);
+  it('shows test reminders through the window Notification constructor when permission is granted', async () => {
     const WindowNotification = vi.fn();
     Object.assign(WindowNotification, { permission: 'granted' });
     setWindowNotification(WindowNotification);
-    setNavigatorServiceWorker({
-      getRegistration: vi.fn().mockResolvedValue({ showNotification }),
-      ready: Promise.resolve({ showNotification }),
-    });
-
-    await expect(showReminderNotification('Payback reminder')).resolves.toEqual({
-      ok: true,
-      method: 'service_worker',
-    });
-    expect(showNotification).toHaveBeenCalledWith(
-      'Envelope Budgeting — Daily Reminder',
-      expect.objectContaining({
-        body: 'Payback reminder',
-        icon: '/icon.svg',
-      })
-    );
-    expect(WindowNotification).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the window Notification constructor when service worker delivery fails', async () => {
-    const WindowNotification = vi.fn();
-    Object.assign(WindowNotification, { permission: 'granted' });
-    setWindowNotification(WindowNotification);
-    setNavigatorServiceWorker({
-      getRegistration: vi.fn().mockRejectedValue(new Error('service worker unavailable')),
-      ready: Promise.resolve(undefined),
-    });
 
     await expect(showReminderNotification('Payback reminder')).resolves.toEqual({
       ok: true,
@@ -104,7 +59,10 @@ describe('browser notification helpers', () => {
     });
     expect(WindowNotification).toHaveBeenCalledWith(
       'Envelope Budgeting — Daily Reminder',
-      expect.objectContaining({ body: 'Payback reminder' })
+      expect.objectContaining({
+        body: 'Payback reminder',
+        icon: '/icon.svg',
+      })
     );
   });
 

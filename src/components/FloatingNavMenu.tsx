@@ -12,8 +12,6 @@ import {
   Mic,
   BookOpen,
   User,
-  Download,
-  Smartphone,
 } from 'lucide-react';
 import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
@@ -28,7 +26,6 @@ interface FloatingNavMenuProps {
   onOpenAddFundsModal: () => void;
   onOpenProfileModal?: () => void;
   onOpenTour?: () => void;
-  onOpenInstallModal?: () => void;
 }
 
 export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
@@ -40,7 +37,6 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
   onOpenAddFundsModal,
   onOpenProfileModal,
   onOpenTour,
-  onOpenInstallModal,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { totalPendingPaybackPaise, activeMember } = useBudget();
@@ -204,21 +200,6 @@ export const FloatingNavMenu: React.FC<FloatingNavMenuProps> = ({
               </button>
             )}
 
-            {onOpenInstallModal && (
-              <button
-                onClick={() => handleAction(onOpenInstallModal)}
-                id="floating-action-install-pwa"
-                className="w-full flex items-center justify-between px-3 py-2.5 min-h-11 rounded-xl border border-[#4E785E]/30 bg-[#4E785E]/10 hover:bg-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7] text-sm sm:text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <Download className="w-3.5 h-3.5 text-[#4E785E]" />
-                  <span>Install Web App (PWA)</span>
-                </div>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#4E785E]/20 text-[#4E785E]">
-                  Offline
-                </span>
-              </button>
-            )}
           </div>
         </div>
       )}

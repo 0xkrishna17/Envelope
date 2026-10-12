@@ -380,7 +380,7 @@ export function buildUnifiedLedger(
     }
   }
 
-  // Sort reverse chronological: date first, then exact timestamp, then ID for deterministic audit ordering.
+  // Sort reverse chronological: newest date first, then latest entry first within that date, then ID for deterministic audit ordering.
   filteredEntries.sort((a, b) => {
     const dateComp = b.date.localeCompare(a.date);
     if (dateComp !== 0) return dateComp;

@@ -26,7 +26,7 @@ interface CloudSyncModalProps {
 }
 
 export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose }) => {
-  const { user, signInWithGoogle, logout, householdId, setHouseholdId, authError } = useAuth();
+  const { user, signInWithGoogle, logout, householdId, setVerifiedHouseholdId, authError } = useAuth();
   const { cloudSyncStatus, lastCloudSync, syncNow, household } = useBudget();
   const { startApiCall, showToast } = useApiLoading();
   const [customHouseholdId, setCustomHouseholdId] = useState('');
@@ -81,13 +81,21 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleSwitchHousehold = (e: React.FormEvent) => {
+  const handleSwitchHousehold = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = customHouseholdId.trim();
-    if (clean) {
-      setHouseholdId(clean);
+    if (!clean) return;
+
+    setErrorMessage(null);
+    const stopLoader = startApiCall('Connecting to household...');
+    try {
+      await setVerifiedHouseholdId(clean, clean);
       setCustomHouseholdId('');
       showToast(`Connected to household ${clean}`, 'success');
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to connect to household.');
+    } finally {
+      stopLoader();
     }
   };
 
@@ -157,7 +165,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
                   ? 'Real-Time Cloud Synced'
                   : cloudSyncStatus === 'syncing'
                   ? 'Syncing to Firebase...'
-                  : 'Offline Cache Active'}
+                  : 'Cloud Unavailable'}
               </div>
               <div className="text-[10px] text-[#78716C] dark:text-[#A8A29E]">
                 {lastCloudSync ? `Last: ${lastCloudSync}` : 'Firestore active'}
@@ -347,7 +355,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
           <div className="flex items-start gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-[#4E785E] shrink-0 mt-0.5" />
             <span>
-              <strong>Offline Resilient:</strong> Keeps working with poor connectivity, auto-syncing when back online.
+              <strong>Cloud-first writes:</strong> Ledger changes require an authorized Google account and an active Firestore connection.
             </span>
           </div>
         </div>

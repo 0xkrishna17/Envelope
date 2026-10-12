@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { formatPaise } from '../utils/currency';
 import { calculateCategoryPendingDebt } from '../utils/budgetLogic';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 import {
   getBrowserNotificationPermission,
   requestBrowserNotificationPermission,
@@ -33,6 +34,7 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
     reconciliationLines,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isPending: isSavingNotificationSettings, run: runSaveNotificationSettings } = usePendingAction('notification-settings:save');
 
   const [reminderTime, setReminderTime] = useState<string>(pushSettings.reminder_time);
   const [enabled, setEnabled] = useState<boolean>(pushSettings.enabled);
@@ -112,9 +114,13 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
         } still owed to the Salary a/c`
       : 'All credit card spend is settled! No transfers needed today.';
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updatePushSettings(reminderTime, enabled);
+    const result = await runSaveNotificationSettings('Saving notification settings...', () => updatePushSettings(reminderTime, enabled));
+    if (!result.ok) {
+      feedback.error(result.message);
+      return;
+    }
     handleBack();
     feedback.notificationSettingsSaved();
   };
@@ -144,11 +150,7 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
     const result = await showReminderNotification(liveNotificationText);
     if (result.ok) {
       setPermissionBannerType('success');
-      setPermissionBannerMsg(
-        result.method === 'service_worker'
-          ? 'Test notification sent through the service worker.'
-          : 'Test notification sent through the browser notification API.'
-      );
+      setPermissionBannerMsg('Test notification sent through the browser notification API.');
     } else {
       setPermissionBannerType('error');
       setPermissionBannerMsg(`${result.message} The in-app preview above still shows what the reminder will say.`);
@@ -163,10 +165,10 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
           type="button"
           onClick={handleBack}
           id="close-notifications-modal"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#AF7832]/20 text-[#AF7832] flex items-center justify-center shadow-xs">
@@ -319,10 +321,12 @@ export const NotificationSettingsScreen: React.FC<NotificationSettingsModalProps
             <button
               type="submit"
               id="save-notifications-btn"
-              className="w-full py-2.5 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-xs flex items-center justify-center gap-1.5 shadow-xs"
+              disabled={isSavingNotificationSettings}
+              aria-busy={isSavingNotificationSettings}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-xs flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50 disabled:cursor-wait"
             >
               <Check className="w-4 h-4" />
-              <span>Save Schedule</span>
+              <span>{isSavingNotificationSettings ? 'Saving...' : 'Save Schedule'}</span>
             </button>
           </div>
         </form>

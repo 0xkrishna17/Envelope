@@ -14,6 +14,7 @@ import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
 import { getMemberDisplayName, getMemberInitial } from '../utils/memberDisplay';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 
 interface ProfileModalProps {
   isOpen?: boolean;
@@ -35,6 +36,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
   const { members, activeMember, updateMemberProfile, setActiveMemberId } = useBudget();
   const { user, markUserProfileCompleted } = useAuth();
   const feedback = useActionFeedback();
+  const { isPending: isSavingProfile, run: runSaveProfile } = usePendingAction('profile:save');
 
   const [name, setName] = useState<string>('');
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(undefined);
@@ -76,7 +78,7 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        // Draw into 200x200 canvas for fast loading & compact storage in Firestore/localStorage
+        // Draw into 200x200 canvas for fast loading and compact storage in Firestore.
         const canvas = document.createElement('canvas');
         const size = 200;
         canvas.width = size;
@@ -107,20 +109,28 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
       || 'You';
     const targetUserId = selectedMemberId || activeMember?.user_id;
 
+    const result = await runSaveProfile('Saving profile to cloud...', async () => {
+      if (targetUserId) {
+        const memberResult = await updateMemberProfile(targetUserId, {
+          name: finalName,
+          avatar_url: avatarUrl || '',
+        });
+        if (!memberResult.ok) return memberResult;
+      }
+
+      await markUserProfileCompleted();
+      return { ok: true as const };
+    });
+
+    if (!result.ok) {
+      feedback.error(result.message);
+      return;
+    }
+
     if (targetUserId) {
-      updateMemberProfile(targetUserId, {
-        name: finalName,
-        avatar_url: avatarUrl || '',
-      });
       setActiveMemberId(targetUserId);
     }
 
-    localStorage.setItem('env_budget_profile_completed', 'true');
-    if (user?.uid) {
-      localStorage.setItem(`env_budget_profile_completed_${user.uid}`, 'true');
-    }
-    localStorage.setItem('env_budget_user_name', finalName);
-    void markUserProfileCompleted();
     handleBack();
     feedback.profileSaved();
   };
@@ -135,10 +145,10 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-profile-screen-btn"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#4E785E]/15 text-[#4E785E] flex items-center justify-center shrink-0">
@@ -313,16 +323,19 @@ export const ProfileScreen: React.FC<ProfileModalProps> = ({
             <button
               type="button"
               onClick={handleBack}
-              className="flex-1 py-2 px-3 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-medium hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] transition-colors cursor-pointer"
+              disabled={isSavingProfile}
+              className="flex-1 py-2 px-3 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] text-xs font-medium hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
             >
               Cancel
             </button>
             <button
               type="submit"
               id="save-profile-btn"
-              className="flex-1 py-2 px-3 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5 cursor-pointer"
+              disabled={isSavingProfile}
+              aria-busy={isSavingProfile}
+              className="flex-1 py-2 px-3 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-wait"
             >
-              <span>{isOnboarding ? 'Save & Start Budgeting' : 'Save Changes'}</span>
+              <span>{isSavingProfile ? 'Saving Profile...' : isOnboarding ? 'Save & Start Budgeting' : 'Save Changes'}</span>
             </button>
           </div>
         </form>

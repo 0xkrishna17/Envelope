@@ -6,6 +6,7 @@ import { ArrowLeft, Check, Plus, Minus, Landmark, Save, Percent, Scale, RefreshC
 import { isWholeRupeeInput, parseWholeRupeeInput } from '../utils/wholeRupeeInput';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 
 interface SalaryArrivalModalProps {
   isOpen?: boolean;
@@ -35,6 +36,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
     addSalaryAndAllocations,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isPending: isSavingSalary, run: runSaveSalary } = usePendingAction('salary:add');
 
   // Step 2: Earner selection (defaults to active user)
   const [selectedEarnerId, setSelectedEarnerId] = useState<string>(activeMember.user_id);
@@ -101,16 +103,7 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
     setSelectedEarnerId(activeMember.user_id);
     setDate(getTodayDateInputValue());
 
-    // Check for saved percentage preferences in localStorage
-    let savedPcts: Record<string, number> | null = null;
-    try {
-      const stored = localStorage.getItem('env_budget_salary_percentages');
-      if (stored) savedPcts = JSON.parse(stored);
-    } catch {}
-
-    // Check if all non-unallocated categories are present in saved percentages
-    const hasAllCats = savedPcts && nonUnallocatedCategories.every(c => typeof savedPcts![c.id] === 'number');
-    const activePcts = hasAllCats ? savedPcts! : getEqualPercentages(nonUnallocatedCategories);
+    const activePcts = getEqualPercentages(nonUnallocatedCategories);
     setPercentages(activePcts);
 
     // Initial salary amount (voice intent amount, else last salary event or ₹1,50,000)
@@ -233,21 +226,23 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
   const residualUnallocatedPaise = Math.max(0, totalSalaryPaise - allocatedPaiseSum);
   const isOverAllocated = allocatedPaiseSum > totalSalaryPaise;
 
-  const handleConfirm = (e: React.FormEvent) => {
+  const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (totalSalaryPaise <= 0 || isOverAllocated) return;
-
-    // Persist customized percentage weights to localStorage
-    try {
-      localStorage.setItem('env_budget_salary_percentages', JSON.stringify(percentages));
-    } catch {}
 
     const allocList = nonUnallocatedCategories.map(cat => ({
       categoryId: cat.id,
       amountPaise: Math.round((allocationsDraft[cat.id] || 0) * 100),
     }));
 
-    addSalaryAndAllocations(selectedEarnerId, totalSalaryPaise, clampDateInputToToday(date), allocList);
+    const result = await runSaveSalary('Saving salary allocation to cloud...', () =>
+      addSalaryAndAllocations(selectedEarnerId, totalSalaryPaise, clampDateInputToToday(date), allocList)
+    );
+    if (!result.success) {
+      feedback.error(result.error);
+      return;
+    }
+
     handleBack();
     feedback.salaryAdded();
     if (onSuccessOpenChecklist) {
@@ -265,10 +260,10 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-salary-modal"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#4E785E]/20 text-[#2C523B] dark:text-[#A8D1B7] flex items-center justify-center shadow-xs">
@@ -505,12 +500,13 @@ export const SalaryArrivalScreen: React.FC<SalaryArrivalModalProps> = ({
           <div className="pt-2">
             <button
               type="submit"
-              disabled={totalSalaryPaise <= 0 || isOverAllocated}
+              disabled={isSavingSalary || totalSalaryPaise <= 0 || isOverAllocated}
+              aria-busy={isSavingSalary}
               id="confirm-salary-allocation-btn"
-              className="w-full py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-sm flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-40 transition-all cursor-pointer shadow-xs"
+              className="w-full py-3 px-4 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] font-medium text-sm flex items-center justify-center gap-2 hover:opacity-95 disabled:opacity-40 disabled:cursor-wait transition-all cursor-pointer shadow-xs"
             >
               <Save className="w-4 h-4" />
-              <span>Save & Confirm Salary Allocation</span>
+              <span>{isSavingSalary ? 'Saving Salary...' : 'Save & Confirm Salary Allocation'}</span>
             </button>
             <p className="text-[11px] text-center text-[#78716C] dark:text-[#A8A29E] mt-1.5">
               Saves percentage weights and generates bank transfer tasks for Spend envelopes (§4.1)

@@ -1,10 +1,9 @@
 export type ReminderNotificationResult =
-  | { ok: true; method: 'service_worker' | 'window' }
+  | { ok: true; method: 'window' }
   | { ok: false; reason: 'unsupported' | 'permission_denied' | 'failed'; message: string };
 
 const REMINDER_TITLE = 'Envelope Budgeting — Daily Reminder';
 const REMINDER_ICON = '/icon.svg';
-const SERVICE_WORKER_READY_TIMEOUT_MS = 1500;
 
 type NotificationConstructorLike = {
   permission: NotificationPermission;
@@ -34,22 +33,6 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
   return NotificationCtor.requestPermission();
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => reject(new Error('Service worker notification timeout')), timeoutMs);
-    promise.then(
-      value => {
-        window.clearTimeout(timeoutId);
-        resolve(value);
-      },
-      reason => {
-        window.clearTimeout(timeoutId);
-        reject(reason);
-      }
-    );
-  });
-}
-
 export async function showReminderNotification(body: string): Promise<ReminderNotificationResult> {
   const NotificationCtor = getNotificationConstructor();
   if (!NotificationCtor) {
@@ -74,22 +57,6 @@ export async function showReminderNotification(body: string): Promise<ReminderNo
     badge: REMINDER_ICON,
     tag: 'envelope-reminder-test',
   };
-
-  try {
-    if ('serviceWorker' in navigator) {
-      const existingRegistration = await navigator.serviceWorker.getRegistration?.();
-      const registration = existingRegistration || (await withTimeout(
-        navigator.serviceWorker.ready,
-        SERVICE_WORKER_READY_TIMEOUT_MS
-      ));
-      if ('showNotification' in registration) {
-        await registration.showNotification(REMINDER_TITLE, options);
-        return { ok: true, method: 'service_worker' };
-      }
-    }
-  } catch {
-    // Fall back to the window Notification constructor where supported.
-  }
 
   try {
     new NotificationCtor(REMINDER_TITLE, options);

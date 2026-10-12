@@ -16,13 +16,11 @@ import { LedgerState } from '../../store/types';
 import { executeFifoReconciliation, recomputeTransactionStatuses } from '../../utils/budgetLogic';
 import { clampDateInputToToday } from '../../utils/dateUtils';
 import { createLedgerEventId, nextEventSequence, readOrCreateDeviceId } from './eventIds';
-import { EventScope, LedgerEvent } from './types';
+import { LedgerEvent } from './types';
 
 type EventOf<TType extends LedgerEvent['type']> = Extract<LedgerEvent, { type: TType }>;
 
 interface CommandContext {
-  storage: Pick<Storage, 'getItem' | 'setItem'>;
-  scope: EventScope;
   householdId: string;
   actorUid: string | null;
   actorMemberId: string;
@@ -43,8 +41,8 @@ interface EventMetadata {
 }
 
 function createEventMetadata(context: CommandContext): EventMetadata {
-  const deviceId = readOrCreateDeviceId(context.storage);
-  const sequence = nextEventSequence(context.storage, context.scope);
+  const deviceId = readOrCreateDeviceId();
+  const sequence = nextEventSequence();
   return {
     id: createLedgerEventId(deviceId, sequence),
     householdId: context.householdId,

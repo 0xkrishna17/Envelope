@@ -7,6 +7,7 @@ import {
 } from '../utils/budgetLogic';
 import { clampDateInputToToday, getTodayDateInputValue } from '../utils/dateUtils';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 import { ArrowLeft, X, Check, ArrowRight, RefreshCw, AlertCircle, History, Trash2 } from 'lucide-react';
 
 interface ReconciliationModalProps {
@@ -36,6 +37,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
     members,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isPending: isSavingReconciliation, run: runSaveReconciliation } = usePendingAction('reconciliation:create');
 
   // Selected category to pay back
   const [selectedCatId, setSelectedCatId] = useState<string>(preselectedCategoryId || '');
@@ -82,7 +84,7 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handlePaybackSubmit = (e: React.FormEvent) => {
+  const handlePaybackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeDebtItem) return;
 
@@ -92,7 +94,13 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
     // Never editable above the amount owed (§4.4)
     const cappedPaise = Math.min(amountPaise, activeDebtItem.totalPendingDebt);
 
-    reconcileCategoryCardSpend(activeDebtItem.category.id, cappedPaise, clampDateInputToToday(date));
+    const result = await runSaveReconciliation('Saving card payback to cloud...', () =>
+      reconcileCategoryCardSpend(activeDebtItem.category.id, cappedPaise, clampDateInputToToday(date))
+    );
+    if (!result.success) {
+      feedback.error(result.error);
+      return;
+    }
     feedback.cardPaybackReconciled();
 
     setJustSettled(true);
@@ -115,10 +123,10 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-reconcile-modal"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#F9ECE8] dark:bg-[#331D16] text-[#87341D] dark:text-[#F3B3A2] flex items-center justify-center shadow-xs">
@@ -201,7 +209,10 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
                         </span>
                         <button
                           type="button"
-                          onClick={() => deleteReconciliation(r.id)}
+                          onClick={async () => {
+                            const result = await deleteReconciliation(r.id);
+                            if (!result.ok) feedback.error(result.message);
+                          }}
                           title="Undo this reconciliation (restores card debt status)"
                           className="p-1.5 rounded-lg text-[#78716C] hover:text-[#B85D43] transition-colors"
                         >
@@ -384,10 +395,16 @@ export const ReconcileScreen: React.FC<ReconciliationModalProps> = ({
               <button
                 type="submit"
                 id="confirm-payback-btn"
-                disabled={!activeDebtItem || rupeesToPaise(payAmountRupees) <= 0 || justSettled}
-                className="w-full py-3 px-4 rounded-xl bg-[#B85D43] text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-[#A34E35] disabled:opacity-40 transition-all cursor-pointer shadow-xs"
+                disabled={isSavingReconciliation || !activeDebtItem || rupeesToPaise(payAmountRupees) <= 0 || justSettled}
+                aria-busy={isSavingReconciliation}
+                className="w-full py-3 px-4 rounded-xl bg-[#B85D43] text-white font-medium text-sm flex items-center justify-center gap-2 hover:bg-[#A34E35] disabled:opacity-40 disabled:cursor-wait transition-all cursor-pointer shadow-xs"
               >
-                {justSettled ? (
+                {isSavingReconciliation ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : justSettled ? (
                   <>
                     <Check className="w-4 h-4 animate-bounce" />
                     <span>Transferred & Settled!</span>

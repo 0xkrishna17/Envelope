@@ -70,3 +70,13 @@ export function getSelectedMonthLabel(yearMonth: string, options?: { includeThis
   }
   return monthName;
 }
+
+export function formatLedgerEntryTime(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return 'Time not set';
+
+  return parsed.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

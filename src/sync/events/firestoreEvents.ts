@@ -28,7 +28,7 @@ export interface FirestoreLedgerEventDocument {
   actor_uid: string | null;
   actor_member_id: string;
   type: LedgerEventType;
-  payload: LedgerEventPayloadByType[LedgerEventType];
+  payload: unknown;
   occurred_at: string;
   schema_version: number;
   device_id: string;
@@ -52,6 +52,18 @@ interface FirestoreEventBase {
   serverCreatedAt?: string;
 }
 
+function sanitizeForFirestore(value: unknown): unknown {
+  if (typeof value === 'undefined') return undefined;
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(item => sanitizeForFirestore(item));
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, entry]) => [key, sanitizeForFirestore(entry)] as const)
+      .filter(([, entry]) => typeof entry !== 'undefined')
+  );
+}
+
 export function ledgerEventToFirestoreDocument(event: LedgerEvent): FirestoreLedgerEventDocument {
   const document: FirestoreLedgerEventDocument = {
     id: event.id,
@@ -59,7 +71,7 @@ export function ledgerEventToFirestoreDocument(event: LedgerEvent): FirestoreLed
     actor_uid: event.actorUid,
     actor_member_id: event.actorMemberId,
     type: event.type,
-    payload: event.payload,
+    payload: sanitizeForFirestore(event.payload),
     occurred_at: event.occurredAt,
     schema_version: event.schemaVersion,
     device_id: event.deviceId,

@@ -15,9 +15,10 @@ import {
   isValidCloudHouseholdId,
   normalizeHouseholdDocId,
 } from './householdIdentity';
-import { HouseholdSubcollectionKey } from './firestorePaths';
 
 export const SYNC_SCHEMA_VERSION = 2;
+
+type HouseholdSubcollectionKey = keyof Omit<FirestoreLedgerDocuments, 'root'>;
 
 export interface HouseholdRootDocument {
   id: string;
@@ -85,7 +86,6 @@ function toFirestoreMember(item: Membership, householdDocId: string): Membership
     user_id: item.user_id,
     name: item.name,
     role: item.role,
-    avatar_color: item.avatar_color,
     joined_at: item.joined_at,
     ...(item.avatar_url !== undefined ? { avatar_url: item.avatar_url } : {}),
     ...(item.email !== undefined ? { email: item.email } : {}),

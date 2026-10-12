@@ -31,7 +31,7 @@ export const getCloudSyncBadgeStatus = (
 export const getCloudSyncHeadline = (status: CloudSyncBadgeStatus): string => {
   switch (status) {
     case 'local_only':
-      return 'Local Ledger Only';
+      return 'Sign In Required';
     case 'access_denied':
       return 'Cloud Access Not Verified';
     case 'not_synced':
@@ -43,26 +43,26 @@ export const getCloudSyncHeadline = (status: CloudSyncBadgeStatus): string => {
     case 'error':
       return 'Cloud Sync Needs Attention';
     case 'offline':
-      return 'Working Offline (Local Storage Active)';
+      return 'Cloud Unavailable';
   }
 };
 
 export const getCloudSyncDescription = (status: CloudSyncBadgeStatus): string => {
   switch (status) {
     case 'local_only':
-      return 'This ledger is saved on this device. Sign in and create or join a cloud household before syncing across authorized devices.';
+      return 'Sign in with an authorized Google account before creating or changing ledger data.';
     case 'access_denied':
       return 'This Google account is not authorized for the selected cloud ledger. Ask the household owner to invite this email, or switch accounts.';
     case 'not_synced':
-      return 'Your cloud household is ready. Run your first sync to make this ledger available on authorized household devices.';
+      return 'Your cloud household is ready. Run your first sync to load the latest authorized ledger state.';
     case 'synced':
-      return 'Your latest ledger is available on authorized household devices. New expenses, salary events, transfers, and card reconciliations will continue syncing when connected.';
+      return 'Your latest ledger is available on authorized household devices. New expenses, salary events, transfers, and card reconciliations require cloud connectivity.';
     case 'syncing':
       return 'Envelope changes are currently being checked or exchanged with your cloud household ledger.';
     case 'error':
-      return 'The app could not confirm the latest cloud sync. Your local ledger remains available while you retry or check account access.';
+      return 'The app could not confirm the latest cloud sync. Reconnect or check account access before making more changes.';
     case 'offline':
-      return 'Changes are saved locally on this device and will not appear on partner devices until cloud sync reconnects.';
+      return 'Changes were not saved. Reconnect to Cloud Firestore and try again.';
   }
 };
 

@@ -3,30 +3,28 @@ import { useBudget } from '../context/BudgetContext';
 import { useAuth } from '../context/AuthContext';
 import { APP_VERSION } from '../App';
 import { HouseholdAccessManager } from './HouseholdAccessManager';
-import { Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen, Download, Smartphone } from 'lucide-react';
+import { ArrowLeft, Users, Bell, Mic, RefreshCw, Shield, Database, Sparkles, CheckCircle2, Cloud, User, Camera, RotateCcw, AlertTriangle, BookOpen, Settings as SettingsIcon } from 'lucide-react';
 import { ResetDataWarningModal } from './ResetDataWarningModal';
 import { getCloudSyncBadgeStatus } from '../utils/syncDisplay';
 import { getMemberDisplayName, getMemberInitial } from '../utils/memberDisplay';
 
 interface SettingsTabProps {
+  onBack?: () => void;
   onOpenInviteModal: () => void;
   onOpenNotificationModal: () => void;
   onOpenVoiceModal: () => void;
   onOpenCloudSyncModal: () => void;
   onOpenProfileModal: () => void;
-  onInstallPwa: () => Promise<void> | void;
-  isPwaInstalled: boolean;
   onOpenTour?: () => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
+  onBack,
   onOpenInviteModal,
   onOpenNotificationModal,
   onOpenVoiceModal,
   onOpenCloudSyncModal,
   onOpenProfileModal,
-  onInstallPwa,
-  isPwaInstalled,
   onOpenTour,
 }) => {
   const { user } = useAuth();
@@ -46,6 +44,35 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
 
   return (
     <div className="flex flex-col gap-4 animate-in fade-in pb-28 sm:pb-20">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-3 border-b border-[#E8E3DA] dark:border-[#2D2823]">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button
+              onClick={onBack}
+              id="settings-back-btn"
+              aria-label="Back to envelopes"
+              className="min-h-11 min-w-11 px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center justify-center text-sm sm:text-xs font-medium"
+              title="Return to Envelopes"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#AF7832]/15 text-[#AF7832] dark:text-[#E8C694] flex items-center justify-center shrink-0">
+              <SettingsIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[#1F1B16] dark:text-[#EDE8E1]">
+                Settings
+              </h1>
+              <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+                Manage your profile, household access, cloud sync, and app preferences.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Household & User Profile Card */}
       <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 sm:p-5 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3.5">
@@ -296,42 +323,6 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </span>
           </div>
         </div>
-      </div>
-
-      {/* PWA Install & Device App Section */}
-      <div className="bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#4E785E]/15 text-[#4E785E] flex items-center justify-center shrink-0">
-            <Smartphone className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center gap-1.5">
-              <span>Install Web App (PWA)</span>
-              {isPwaInstalled && (
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#4E785E]/15 text-[#4E785E]">
-                  Installed
-                </span>
-              )}
-            </h3>
-            <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5">
-              {isPwaInstalled
-                ? 'App is installed on your device with offline support and home screen icon.'
-                : 'Add to your phone or desktop home screen for full-screen offline access.'}
-            </p>
-          </div>
-        </div>
-
-        {!isPwaInstalled && (
-          <button
-            type="button"
-            onClick={onInstallPwa}
-            id="install-pwa-btn"
-            className="px-4 py-2 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity cursor-pointer shrink-0"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Install App</span>
-          </button>
-        )}
       </div>
 
       {/* Danger Zone: Reset Data */}

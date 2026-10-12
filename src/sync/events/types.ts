@@ -173,7 +173,7 @@ export interface SyncWatermark {
 }
 
 export type EventScope =
-  | { kind: 'local' }
+  | { kind: 'signed_out' }
   | { kind: 'cloud'; userUid: string; householdId: string };
 
 export interface ProjectionSeed {

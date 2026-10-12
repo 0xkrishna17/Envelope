@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useBudget } from '../context/BudgetContext';
+import { useActionFeedback } from '../hooks/useActionFeedback';
+import { useApiLoading } from '../context/ApiLoadingContext';
 import { formatPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { CheckSquare, Square, ChevronDown, ChevronUp, Check, ExternalLink, Landmark } from 'lucide-react';
@@ -11,7 +13,21 @@ export const TransferChecklistCard: React.FC = () => {
     markAllAllocationsTransferred,
   } = useBudget();
 
+  const feedback = useActionFeedback();
+  const { isActionPending, runAction } = useApiLoading();
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
+
+  const isMarkingAll = isActionPending('transfer-checklist:mark-all');
+
+  const handleMarkAllTransferred = async () => {
+    const result = await runAction('transfer-checklist:mark-all', 'Saving transfer checklist...', () => markAllAllocationsTransferred());
+    if (!result.ok) feedback.error(result.message);
+  };
+
+  const handleToggleTransferred = async (allocationId: string) => {
+    const result = await runAction(`transfer-checklist:toggle:${allocationId}`, 'Saving transfer checklist...', () => toggleAllocationTransferred(allocationId));
+    if (!result.ok) feedback.error(result.message);
+  };
 
   if (pendingTransfersList.length === 0) {
     return null;
@@ -58,11 +74,13 @@ export const TransferChecklistCard: React.FC = () => {
         {/* Desktop actions */}
         <div className="hidden sm:flex items-center gap-2 shrink-0">
           <button
-            onClick={() => markAllAllocationsTransferred()}
+            onClick={handleMarkAllTransferred}
+            disabled={isMarkingAll}
+            aria-busy={isMarkingAll}
             id="mark-all-transfers-btn"
-            className="text-[11px] font-semibold text-[#7A4E15] dark:text-[#E8C694] hover:underline px-2 py-1 rounded-md hover:bg-[#AF7832]/10 transition-colors"
+            className="text-[11px] font-semibold text-[#7A4E15] dark:text-[#E8C694] hover:underline px-2 py-1 rounded-md hover:bg-[#AF7832]/10 transition-colors disabled:opacity-50 disabled:cursor-wait"
           >
-            Mark All Done
+            {isMarkingAll ? 'Saving...' : 'Mark All Done'}
           </button>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -84,21 +102,28 @@ export const TransferChecklistCard: React.FC = () => {
             </span>
             {/* Mobile Mark All Done button placed in expanded section for clear hierarchy */}
             <button
-              onClick={() => markAllAllocationsTransferred()}
+              onClick={handleMarkAllTransferred}
+              disabled={isMarkingAll}
+              aria-busy={isMarkingAll}
               id="mark-all-transfers-btn-mobile"
-              className="sm:hidden text-[11px] font-semibold text-[#7A4E15] dark:text-[#E8C694] hover:underline px-2 py-0.5 rounded-md bg-[#AF7832]/10 active:bg-[#AF7832]/20 transition-colors"
+              className="sm:hidden text-[11px] font-semibold text-[#7A4E15] dark:text-[#E8C694] hover:underline px-2 py-0.5 rounded-md bg-[#AF7832]/10 active:bg-[#AF7832]/20 transition-colors disabled:opacity-50 disabled:cursor-wait"
             >
-              Mark All Done
+              {isMarkingAll ? 'Saving...' : 'Mark All Done'}
             </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-            {pendingTransfersList.map(alloc => (
+            {pendingTransfersList.map(alloc => {
+              const isToggling = isActionPending(`transfer-checklist:toggle:${alloc.id}`);
+              return (
               <div
                 key={alloc.id}
-                onClick={() => toggleAllocationTransferred(alloc.id)}
+                onClick={() => {
+                  if (!isToggling) void handleToggleTransferred(alloc.id);
+                }}
+                aria-busy={isToggling}
                 id={`transfer-item-${alloc.id}`}
-                className="flex items-center justify-between p-2.5 rounded-xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] cursor-pointer hover:border-[#AF7832] transition-colors"
+                className={`flex items-center justify-between p-2.5 rounded-xl bg-[#FAF7F2] dark:bg-[#1A1714] border border-[#E8E3DA] dark:border-[#2D2823] hover:border-[#AF7832] transition-colors ${isToggling ? 'opacity-60 cursor-wait' : 'cursor-pointer'}`}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <div
@@ -126,7 +151,8 @@ export const TransferChecklistCard: React.FC = () => {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

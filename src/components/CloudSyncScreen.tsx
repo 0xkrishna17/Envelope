@@ -147,25 +147,25 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
             <button
               onClick={onBack}
               id="sync-back-btn"
-              className="min-h-11 px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center justify-center gap-1.5 text-sm sm:text-xs font-medium"
+              aria-label="Back to envelopes"
+              className="min-h-11 min-w-11 px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center justify-center text-sm sm:text-xs font-medium"
               title="Return to Envelopes"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back</span>
             </button>
           )}
-          <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#486B88]/15 text-[#486B88] dark:text-[#A8C4DE] flex items-center justify-center shrink-0">
-                <Cloud className="w-4.5 h-4.5" />
-              </div>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#486B88]/15 text-[#486B88] dark:text-[#A8C4DE] flex items-center justify-center shrink-0">
+              <Cloud className="w-5 h-5" />
+            </div>
+            <div>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[#1F1B16] dark:text-[#EDE8E1]">
                 Cloud & Cross-Device Sync
               </h1>
+              <p className="text-xs text-[#78716C] dark:text-[#A8A29E]">
+                Real-time multi-device ledger mirroring powered by Google Firebase Firestore
+              </p>
             </div>
-            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1">
-              Real-time multi-device ledger mirroring powered by Google Firebase Firestore
-            </p>
           </div>
         </div>
 
@@ -478,7 +478,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
                 <span>Clear Firebase Cloud Store & Start Clean</span>
               </h2>
               <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-0.5">
-                Owner-only reset that wipes transactions, salary arrivals, and balances from Cloud Firestore and local storage so you can start fresh with ₹0.
+                Owner-only reset that wipes transactions, salary arrivals, and balances from Cloud Firestore so you can start fresh with ₹0.
               </p>
             </div>
 
@@ -498,10 +498,10 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
             onClose={() => setIsResetCleanModalOpen(false)}
             onConfirm={async () => {
               const result = await resetLedgerToZero(false);
-              showToast(result.ok ? 'Cloud store and local ledger cleared to ₹0' : result.message || 'Reset failed.', result.ok ? 'success' : 'error');
+              showToast(result.ok ? 'Cloud store cleared to ₹0' : result.message || 'Reset failed.', result.ok ? 'success' : 'error');
             }}
             title="Clear Cloud Database & Start Clean?"
-            description="This owner-only action permanently resets all transactions, envelope balances, and credit card debts to ₹0 in Firebase Firestore and locally. Your envelope categories and Google account permissions remain intact."
+            description="This owner-only action permanently resets all transactions, envelope balances, and credit card debts to ₹0 in Firebase Firestore. Your envelope categories and Google account permissions remain intact."
             confirmText="Yes, Clear Cloud Store"
             isZeroReset={true}
             bulletPoints={[
@@ -527,7 +527,7 @@ export const CloudSyncScreen: React.FC<CloudSyncScreenProps> = ({
         <div className="flex items-start gap-2">
           <ShieldCheck className="w-4 h-4 text-[#4E785E] shrink-0 mt-0.5" />
           <span>
-            <strong>Offline resilience:</strong> Works smoothly offline. Changes queue locally in storage and auto-commit to Firestore the moment you reconnect.
+            <strong>Cloud-first writes:</strong> Changes are saved only after Firestore accepts them, so reconnect before editing when the device is offline.
           </span>
         </div>
       </div>

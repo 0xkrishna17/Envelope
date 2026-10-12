@@ -38,11 +38,11 @@ export const HouseholdInviteScreen: React.FC<HouseholdInviteScreenProps> = ({
             <button
               onClick={onBack}
               id="members-back-btn"
-              className="min-h-11 px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center justify-center gap-1.5 text-sm sm:text-xs font-medium"
+              aria-label="Back to envelopes"
+              className="min-h-11 min-w-11 px-3 py-2 rounded-xl border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer flex items-center justify-center text-sm sm:text-xs font-medium"
               title="Return to Envelopes"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Back</span>
             </button>
           )}
           <div className="flex items-center gap-2.5">

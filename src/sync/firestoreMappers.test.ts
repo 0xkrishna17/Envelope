@@ -277,7 +277,6 @@ describe('firestoreMappers', () => {
             user_id: 'usr_me',
             name: 'Owner',
             role: 'owner',
-            avatar_color: '#486B88',
             avatar_url: undefined,
             email: undefined,
             joined_at: '2026-09-01T00:00:00Z',

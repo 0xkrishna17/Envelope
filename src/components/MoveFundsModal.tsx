@@ -3,6 +3,7 @@ import { useBudget } from '../context/BudgetContext';
 import { formatPaise, rupeesToPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { usePendingAction } from '../context/ApiLoadingContext';
 import {
   ArrowLeft,
   X,
@@ -46,6 +47,7 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
     members,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isPending: isMovingFunds, run: runMoveFunds } = usePendingAction('funds:move');
 
   // Active, non-deleted categories
   const availableCategories = useMemo(() => {
@@ -145,7 +147,7 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
     setErrorMsg('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -163,12 +165,12 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
       return;
     }
 
-    const res = moveEnvelopeFunds({
+    const res = await runMoveFunds('Moving funds in cloud...', () => moveEnvelopeFunds({
       fromCategoryId,
       toCategoryId,
       amountPaise: parsedAmountPaise,
       note: note.trim() || undefined,
-    });
+    }));
 
     if (!res.success) {
       setErrorMsg(res.error || 'Failed to move funds.');
@@ -191,10 +193,10 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
           type="button"
           onClick={handleBack}
           id="close-move-funds-modal"
-          className="inline-flex items-center gap-1.5 min-h-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
+          aria-label="Back to envelopes"
+          className="inline-flex items-center justify-center min-h-11 min-w-11 px-3 py-2.5 sm:py-1.5 rounded-xl bg-[#EFEAE1]/80 dark:bg-[#28221D]/80 hover:bg-[#E5DFD3] dark:hover:bg-[#342D26] text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] transition-colors cursor-pointer shadow-xs"
         >
           <ArrowLeft className="w-4 h-4 text-[#78716C]" />
-          <span>Back</span>
         </button>
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#486B88] text-white flex items-center justify-center shadow-xs">
@@ -489,12 +491,15 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
               <button
                 type="submit"
                 id="confirm-move-funds-btn"
-                disabled={parsedAmountPaise <= 0 || !fromCategoryId || !toCategoryId || fromCategoryId === toCategoryId}
-                className="flex-1 py-2.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex items-center justify-center gap-1.5 cursor-pointer"
+                disabled={isMovingFunds || parsedAmountPaise <= 0 || !fromCategoryId || !toCategoryId || fromCategoryId === toCategoryId}
+                aria-busy={isMovingFunds}
+                className="flex-1 py-2.5 rounded-xl bg-[#1F1B16] text-[#FAF7F2] dark:bg-[#EDE8E1] dark:text-[#1A1714] text-xs font-semibold shadow-xs hover:opacity-90 disabled:opacity-50 disabled:cursor-wait transition-opacity flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>
-                  {fromCategory?.is_unallocated && toCategory
+                  {isMovingFunds
+                    ? 'Moving...'
+                    : fromCategory?.is_unallocated && toCategory
                     ? `Add Money to ${toCategory.name}`
                     : 'Confirm Transfer'}
                 </span>
@@ -550,7 +555,10 @@ export const MoveFundsScreen: React.FC<MoveFundsModalProps> = ({
                           </span>
                           <button
                             type="button"
-                            onClick={() => deleteEnvelopeTransfer(tr.id)}
+                            onClick={async () => {
+                              const result = await deleteEnvelopeTransfer(tr.id);
+                              if (!result.ok) setErrorMsg(result.message);
+                            }}
                             title="Undo transfer"
                             className="p-1 rounded text-[#78716C] hover:text-[#B85D43] transition-colors"
                           >

@@ -11,7 +11,7 @@ import {
 } from '../types';
 import { formatPaise } from '../utils/currency';
 import { renderCategoryIcon } from '../utils/categoryTheme';
-import { formatSelectedMonth } from '../utils/dateUtils';
+import { formatLedgerEntryTime, formatSelectedMonth } from '../utils/dateUtils';
 import { getMemberDisplayName } from '../utils/memberDisplay';
 import {
   buildUnifiedLedger,
@@ -19,6 +19,7 @@ import {
   LedgerEntryType,
 } from '../utils/ledger';
 import { useActionFeedback } from '../hooks/useActionFeedback';
+import { useApiLoading } from '../context/ApiLoadingContext';
 import {
   Search,
   Filter,
@@ -75,6 +76,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     deleteCategoryFunds,
   } = useBudget();
   const feedback = useActionFeedback();
+  const { isActionPending, runAction } = useApiLoading();
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -159,19 +161,35 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
     }
   };
 
-  const handleRevertEntry = () => {
+  const isRevertingInspectEntry = inspectEntry ? isActionPending(`ledger:revert:${inspectEntry.id}`) : false;
+
+  const handleRevertEntry = async () => {
     if (!inspectEntry) return;
 
+    const pendingKey = `ledger:revert:${inspectEntry.id}`;
+
     if (inspectEntry.type === 'fund_move') {
-      deleteEnvelopeTransfer((inspectEntry.raw as EnvelopeTransfer).id);
+      const result = await runAction(pendingKey, 'Reversing ledger entry...', () => deleteEnvelopeTransfer((inspectEntry.raw as EnvelopeTransfer).id));
+      if (!result.ok) {
+        feedback.error(result.message);
+        return;
+      }
       setInspectEntry(null);
       feedback.transferReversed();
     } else if (inspectEntry.type === 'reconcile') {
-      deleteReconciliation((inspectEntry.raw as Reconciliation).id);
+      const result = await runAction(pendingKey, 'Reversing ledger entry...', () => deleteReconciliation((inspectEntry.raw as Reconciliation).id));
+      if (!result.ok) {
+        feedback.error(result.message);
+        return;
+      }
       setInspectEntry(null);
       feedback.cardPaybackReversed();
     } else if (inspectEntry.type === 'category_topup') {
-      deleteCategoryFunds(inspectEntry.allocationId || (inspectEntry.raw as Allocation).id);
+      const result = await runAction(pendingKey, 'Reversing ledger entry...', () => deleteCategoryFunds(inspectEntry.allocationId || (inspectEntry.raw as Allocation).id));
+      if (!result.ok) {
+        feedback.error(result.message);
+        return;
+      }
       setInspectEntry(null);
       feedback.topUpReversed();
     }
@@ -520,6 +538,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
 
                     <div className="text-[11px] text-[#78716C] dark:text-[#A8A29E] flex items-center gap-1.5 mt-0.5 truncate">
                       <span>{entry.date}</span>
+                      <span className="font-amount tabular-nums">{formatLedgerEntryTime(entry.timestamp)}</span>
                       <span>•</span>
                       <span className="font-medium text-[#4E785E] dark:text-[#A8D1B7]">
                         {entry.loggedByName}
@@ -645,7 +664,7 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                     {inspectEntry.type === 'fund_move' && 'Envelope Transfer Details'}
                   </h3>
                   <p className="text-[11px] text-[#78716C]">
-                    Recorded on {inspectEntry.date}
+                    Recorded on {inspectEntry.date} at {formatLedgerEntryTime(inspectEntry.timestamp)}
                   </p>
                 </div>
               </div>
@@ -860,18 +879,22 @@ export const TransactionLedger: React.FC<TransactionLedgerProps> = ({
                       </button>
                       <button
                         onClick={handleRevertEntry}
+                        disabled={isRevertingInspectEntry}
+                        aria-busy={isRevertingInspectEntry}
                         id="confirm-revert-ledger-entry-btn"
-                        className="px-3 py-1 text-xs rounded-lg bg-[#87341D] text-white font-medium hover:opacity-90"
+                        className="px-3 py-1 text-xs rounded-lg bg-[#87341D] text-white font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
                       >
-                        Add Reversal
+                        {isRevertingInspectEntry ? 'Reversing...' : 'Add Reversal'}
                       </button>
                     </div>
                   </div>
                 ) : (
                   <button
                     onClick={() => setConfirmDeleteAction(true)}
+                    disabled={isRevertingInspectEntry}
+                    aria-busy={isRevertingInspectEntry}
                     id="revert-ledger-entry-btn"
-                    className="text-xs text-[#87341D] dark:text-[#E89E8C] hover:underline flex items-center gap-1 font-medium"
+                    className="text-xs text-[#87341D] dark:text-[#E89E8C] hover:underline flex items-center gap-1 font-medium disabled:opacity-50 disabled:cursor-wait"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Add Reversal Entry</span>

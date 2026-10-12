@@ -218,17 +218,15 @@ export const AppTourGuide: React.FC<AppTourGuideProps> = ({
       setIsResetting(true);
       try {
         await onCompleteFirstTime();
+      } catch (e) {
+        console.warn('Error saving first-time tour completion:', e);
       } finally {
         setIsResetting(false);
+        onClose();
       }
     } else {
-      try {
-        localStorage.setItem('env_budget_tour_completed', 'true');
-      } catch (e) {
-        console.error('Error saving tour preference:', e);
-      }
+      onClose();
     }
-    onClose();
   };
 
   if (!isOpen) return null;
