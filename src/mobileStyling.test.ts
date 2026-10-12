@@ -14,6 +14,13 @@ const settingsSource = readFileSync('src/components/SettingsTab.tsx', 'utf8');
 const cloudSyncSource = readFileSync('src/components/CloudSyncScreen.tsx', 'utf8');
 const inviteSource = readFileSync('src/components/HouseholdInviteScreen.tsx', 'utf8');
 const categoryDetailSource = readFileSync('src/components/CategoryDetailModal.tsx', 'utf8');
+const reconcileSource = readFileSync('src/components/ReconciliationModal.tsx', 'utf8');
+const salarySource = readFileSync('src/components/SalaryArrivalModal.tsx', 'utf8');
+const profileSource = readFileSync('src/components/ProfileModal.tsx', 'utf8');
+const notificationsSource = readFileSync('src/components/NotificationSettingsModal.tsx', 'utf8');
+const editTransactionSource = readFileSync('src/components/EditTransactionModal.tsx', 'utf8');
+const moveFundsSource = readFileSync('src/components/MoveFundsModal.tsx', 'utf8');
+const voiceInputSource = readFileSync('src/components/VoiceInputModal.tsx', 'utf8');
 
 const allScreenSources = [
   floatingNavSource,
@@ -22,6 +29,16 @@ const allScreenSources = [
   settingsSource,
   cloudSyncSource,
   inviteSource,
+  categoryDetailSource,
+  reconcileSource,
+  salarySource,
+  profileSource,
+  notificationsSource,
+  editTransactionSource,
+  moveFundsSource,
+  voiceInputSource,
+  addFundsSource,
+  logExpenseSource,
 ];
 
 describe('mobile styling safeguards', () => {
@@ -50,6 +67,13 @@ describe('mobile styling safeguards', () => {
   it('keeps expense category choices less cramped on phones', () => {
     expect(logExpenseSource).toContain('grid grid-cols-2 sm:grid-cols-4 gap-2.5');
     expect(logExpenseSource).toContain('min-h-20 sm:min-h-0');
+  });
+
+  it('locks Log Expense to the preselected envelope while preserving the generic picker', () => {
+    expect(logExpenseSource).toContain('id="locked-selected-expense-category-card"');
+    expect(logExpenseSource).toContain('preselectedCategoryId && selectedCategory && selectedCategory.id === preselectedCategoryId');
+    expect(logExpenseSource).toContain('Expense will be logged against this envelope.');
+    expect(logExpenseSource).toContain('id={`cat-select-${cat.id}`}');
   });
 
   it('keeps specific-category Add Money compact while preserving the generic picker', () => {
@@ -90,6 +114,44 @@ describe('mobile styling safeguards', () => {
     expect(headerSource).toContain('id="reminder-settings-btn"');
   });
 
+  it('keeps category target copy informational rather than monthly', () => {
+    expect(categoryManagementSource).toContain('Target (Optional, purely informational)');
+    expect(categoryManagementSource).not.toContain('Target Monthly Amount (Optional, purely informational)');
+  });
+
+  it('standardizes screen header back buttons as icon-only and accessible', () => {
+    const screenBackButtons = [
+      { source: categoryManagementSource, id: 'back-category-management-btn' },
+      { source: reconcileSource, id: 'close-reconcile-modal' },
+      { source: salarySource, id: 'close-salary-modal' },
+      { source: profileSource, id: 'close-profile-screen-btn' },
+      { source: notificationsSource, id: 'close-notifications-modal' },
+      { source: editTransactionSource, id: 'close-edit-tx-modal' },
+      { source: logExpenseSource, id: 'close-log-tx-modal' },
+      { source: moveFundsSource, id: 'close-move-funds-modal' },
+      { source: addFundsSource, id: 'close-add-funds-modal-btn' },
+      { source: voiceInputSource, id: 'close-voice-modal' },
+      { source: cloudSyncSource, id: 'sync-back-btn' },
+      { source: inviteSource, id: 'members-back-btn' },
+      { source: settingsSource, id: 'settings-back-btn' },
+    ];
+
+    screenBackButtons.forEach(({ source, id }) => {
+      expect(source).toContain(`id="${id}"`);
+      expect(source).toContain('aria-label="Back to envelopes"');
+      expect(source).not.toContain('<span>Back</span>');
+      expect(source).not.toContain('hidden sm:inline">Back');
+    });
+
+    expect(appSource).toContain('<CategoryManagement');
+    expect(appSource).toContain('<SettingsTab');
+    expect(appSource).toContain("setActiveTab('envelopes')");
+    expect(settingsSource).toContain('Manage your profile, household access, cloud sync, and app preferences.');
+    expect(cloudSyncSource).toContain('w-9 h-9 rounded-xl bg-[#486B88]/15');
+    expect(cloudSyncSource).toContain('<Cloud className="w-5 h-5" />');
+    expect(inviteSource).toContain('w-9 h-9 rounded-xl bg-[#4E785E]/15');
+  });
+
   it('keeps dense management and ledger controls mobile-first', () => {
     expect(ledgerSource).toContain('hidden sm:grid sm:grid-cols-2 gap-2 flex-1');
     expect(ledgerSource).toContain('id="ledger-filter-type-mobile"');
@@ -116,7 +178,11 @@ describe('mobile styling safeguards', () => {
     expect(appSource).toContain('col-span-1 p-2 sm:p-4');
     expect(appSource).toContain('sr-only sm:not-sr-only sm:truncate');
     expect(appSource).toContain('hidden sm:block text-[11px] text-[#87341D]/80');
-    expect(appSource).toContain('w-full sm:w-auto sm:self-end min-h-11');
+    expect(appSource).toContain('id="envelopes-log-money-btn"');
+    expect(appSource).toContain('id="envelopes-add-money-btn"');
+    expect(appSource).toContain('grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end sm:gap-2');
+    expect(appSource).toContain('Log Money');
+    expect(appSource).toContain('Add Money');
     expect(appSource).toContain('flex items-center overflow-hidden bg-[#EFEAE1]/80');
     expect(appSource).toContain('h-9 min-h-9 w-10 min-w-10 sm:h-7 sm:min-h-7 sm:w-8 sm:min-w-8');
     expect(appSource).toContain('grid place-items-center');

@@ -8,8 +8,9 @@ Envelope uses Google Auth plus Firestore root metadata to keep private ledgers i
 - The active dashboard is selected from `/users/{uid}.activeLedgerId`.
 - Household IDs are internal generated IDs and are not join links.
 - Firestore rules are the security boundary. Client-side checks improve UX, but rules must reject unauthorized reads and writes.
-- The reserved local ID `local` is never a cloud household ID.
+- The reserved ID `local` is never a cloud household ID and is not a writable local ledger mode.
 - Ledger contents are represented by immutable events under the household event collection.
+- Signed-out users cannot create durable ledger data.
 
 ## Firestore model
 
@@ -21,6 +22,8 @@ Envelope uses Google Auth plus Firestore root metadata to keep private ledgers i
   photoURL
   privateLedgerId
   activeLedgerId
+  introCompleted
+  profileCompleted
   createdAt
   updatedAt
 
@@ -62,7 +65,7 @@ Envelope uses Google Auth plus Firestore root metadata to keep private ledgers i
 2. App reads `/users/{uid}`.
 3. If `privateLedgerId` is missing, the app creates a generated private `/households/{householdId}` owned by that UID/email.
 4. If `activeLedgerId` is missing, it is set to `privateLedgerId`.
-5. The app loads household root metadata, subscribes to household events, and projects the event log into Redux.
+5. The app loads household root metadata, subscribes to household events, and projects the cloud event log into Redux.
 
 ## Invite lifecycle
 
@@ -102,18 +105,18 @@ Domain behavior is represented by immutable ledger events and deterministic proj
 - Direct top-up, envelope transfer, and reconciliation reversals append offsetting events.
 - Salary arrival appends salary and allocation events.
 - Reset appends a reset boundary event and projects a post-reset read model.
-- The current dashboard is always the projection of the scoped event log.
+- The current dashboard is always the projection of the active household's Firestore event log.
 
 ## Event logs
 
-- Authenticated cloud event logs are scoped by user UID and household ID.
-- Local-only event logs are scoped to the local household.
+- Authenticated cloud event logs are scoped by household ID and protected by Firestore rules.
 - Duplicate events are ignored by event ID.
-- Realtime Firestore event subscriptions append unseen remote events and project the read model.
+- Realtime Firestore event subscriptions project remote event changes into the read model.
+- App-owned browser storage is not used for local event logs, imports, queues, or caches.
 
 ## Security checklist
 
-- Manual household IDs from URLs/local storage must not grant access.
+- Manual household IDs from URLs must not grant access.
 - Firestore rules must check owner UID, member UID, or owner email against the household root document.
 - Only generated cloud household IDs can be written to Firestore.
 - Event documents under `/households/{householdId}/events/{eventId}` are immutable.

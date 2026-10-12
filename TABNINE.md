@@ -26,8 +26,8 @@ Core capabilities include:
 
 - Envelope/category budgeting with salary allocations, direct category top-ups, and envelope-to-envelope transfers.
 - Transaction logging with payment method tracking and credit-card reconciliation support.
-- Household/member management, Google account allowlist access control, explicit local-to-cloud import, and cross-device sync.
-- PWA install support and notification settings.
+- Household/member management, Google account allowlist access control, and cloud-first cross-device sync.
+- Notification settings.
 - Voice/natural-language transaction parsing via Gemini, with deterministic local parsing fallback.
 
 Main technologies:
@@ -43,10 +43,10 @@ Main technologies:
 
 ## Repository Structure
 
-- `src/App.tsx` — main application shell, tab navigation, screen/modal orchestration, onboarding/tour flow, PWA install prompt, and app version constant.
+- `src/App.tsx` — main application shell, tab navigation, screen/modal orchestration, onboarding/tour flow, legacy service-worker cleanup, and app version constant.
 - `src/components/` — UI screens and modal-style components for budgeting, settings, sync, profile, household access, and transactions.
 - `src/context/` — React context providers that bridge auth/API loading/budget state into the component tree.
-- `src/store/` — Redux Toolkit store, ledger slice, selectors, sync middleware, and related tests.
+- `src/store/` — Redux Toolkit store, ledger slice, selectors, and related tests.
 - `src/utils/` — domain logic and reusable utilities for budgeting, ledger calculations, dates, currency, validation, category top-ups, and intent parsing tests.
 - `src/data/initialData.ts` — initial household/member/category seed data.
 - `src/lib/firebase.ts` — Firebase initialization and related helpers.
@@ -54,7 +54,7 @@ Main technologies:
 - `server/intentParser.ts` — Gemini/local natural-language intent parsing implementation shared by Express and Netlify Functions.
 - `netlify.toml` — Netlify build, function, API redirect, and SPA fallback configuration.
 - `netlify/functions/` — Netlify serverless equivalents for API endpoints used by the frontend.
-- `public/` — PWA manifest, service worker, icon, and static assets.
+- `public/` — icon and static assets.
 - `firestore.rules` — Firestore security rules.
 - `firebase-*.json` — Firebase applet/blueprint configuration.
 
@@ -139,7 +139,7 @@ Removes generated build artifacts (`dist`, `server.js`).
 - App navigation uses `activeTab` plus a union-style `ActiveScreen` object in `App.tsx` for screen/modal orchestration. Add new screens through that existing pattern unless a broader navigation refactor is explicitly requested.
 - The app version is exported as `APP_VERSION` in `src/App.tsx` and is intended to be incremented with each user-visible iteration.
 - Prefer existing icons from `lucide-react`; do not add new UI libraries without checking license and project fit.
-- Preserve PWA behavior in `public/manifest.json`, `public/sw.js`, and `usePwaInstall` when changing install/offline flows.
+- Preserve the legacy service-worker cleanup in `src/main.tsx` so previously installed clients unregister old offline workers and clear stale caches.
 
 ## Server/API Conventions
 

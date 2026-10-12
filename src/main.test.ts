@@ -3,17 +3,12 @@ import { readFileSync } from 'node:fs';
 
 const mainSource = readFileSync('src/main.tsx', 'utf8');
 
-describe('service worker registration', () => {
-  it('checks for updates and reloads once when a new worker takes control', () => {
-    expect(mainSource).toContain("navigator.serviceWorker.register('/sw.js').then(registration =>");
-    expect(mainSource).toContain('activateWaitingServiceWorker(registration);');
-    expect(mainSource).toContain("registration.addEventListener('updatefound'");
-    expect(mainSource).toContain("installingWorker.addEventListener('statechange'");
-    expect(mainSource).toContain("registration.waiting?.postMessage({ type: 'SKIP_WAITING' });");
-    expect(mainSource).toContain('registration.update()');
-    expect(mainSource).toContain('const hadController = Boolean(navigator.serviceWorker.controller);');
-    expect(mainSource).toContain("navigator.serviceWorker.addEventListener('controllerchange'");
-    expect(mainSource).toContain('window.location.reload()');
-    expect(mainSource).toContain('if (!hadController || isRefreshing) return;');
+describe('legacy offline cleanup', () => {
+  it('unregisters old service workers and clears caches without registering a new worker', () => {
+    expect(mainSource).toContain('navigator.serviceWorker.getRegistrations()');
+    expect(mainSource).toContain('registration.unregister()');
+    expect(mainSource).toContain('caches.keys()');
+    expect(mainSource).toContain('caches.delete(key)');
+    expect(mainSource).not.toContain("register('/sw.js')");
   });
 });

@@ -38,8 +38,6 @@ interface AuthContextType {
   authError: string | null;
 }
 
-export const AUTH_STATUS_KEY = 'env_budget_auth_status';
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface UserProfileData {
@@ -195,10 +193,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setProfileLoading(Boolean(currentUser));
 
       if (currentUser) {
-        try {
-          localStorage.setItem(AUTH_STATUS_KEY, 'signed_in');
-        } catch {}
-
         (async () => {
           try {
             const userRef = doc(db, 'users', currentUser.uid);
@@ -258,9 +252,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         })();
       } else {
-        try {
-          localStorage.removeItem(AUTH_STATUS_KEY);
-        } catch {}
         setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
         setPrivateLedgerId(null);
         setSharedLedgerId(null);
@@ -288,7 +279,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = async () => {
     setAuthError(null);
     try {
-      localStorage.removeItem(AUTH_STATUS_KEY);
       setHouseholdIdState(LOCAL_HOUSEHOLD_ID);
       setPrivateLedgerId(null);
       setSharedLedgerId(null);

@@ -4,40 +4,28 @@ import App, { APP_VERSION } from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
-function activateWaitingServiceWorker(registration: ServiceWorkerRegistration): void {
-  registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+async function removeLegacyOfflineCaches(): Promise<void> {
+  if (typeof caches === 'undefined') return;
+
+  const keys = await caches.keys();
+  await Promise.all(keys.map(key => caches.delete(key)));
 }
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    const hadController = Boolean(navigator.serviceWorker.controller);
-    let isRefreshing = false;
+async function unregisterLegacyServiceWorkers(): Promise<void> {
+  if (!('serviceWorker' in navigator)) return;
 
-    navigator.serviceWorker.register('/sw.js').then(registration => {
-      activateWaitingServiceWorker(registration);
-      registration.update().catch(() => undefined);
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map(registration => registration.unregister()));
+}
 
-      registration.addEventListener('updatefound', () => {
-        const installingWorker = registration.installing;
-        if (!installingWorker) return;
-
-        installingWorker.addEventListener('statechange', () => {
-          if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            activateWaitingServiceWorker(registration);
-          }
-        });
-      });
-
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!hadController || isRefreshing) return;
-        isRefreshing = true;
-        window.location.reload();
-      });
-    }).catch(err => {
-      console.log('SW registration note:', err);
-    });
+window.addEventListener('load', () => {
+  Promise.all([
+    unregisterLegacyServiceWorkers(),
+    removeLegacyOfflineCaches(),
+  ]).catch(err => {
+    console.info('Legacy offline cleanup note:', err);
   });
-}
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

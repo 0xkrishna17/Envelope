@@ -22,9 +22,6 @@ import { FloatingNavMenu } from './components/FloatingNavMenu';
 import { ProfileScreen } from './components/ProfileModal';
 import { AppTourGuide } from './components/AppTourGuide';
 import { AccessDeniedGate } from './components/AccessDeniedGate';
-import { InstallAppModal } from './components/InstallAppModal';
-import { ResetDataWarningModal } from './components/ResetDataWarningModal';
-import { usePwaInstall } from './hooks/usePwaInstall';
 import { ApiLoadingProvider } from './context/ApiLoadingContext';
 import { formatPaise, paiseToWords } from './utils/currency';
 import { Transaction, ActiveTab } from './types';
@@ -46,13 +43,8 @@ function BudgetAppContent() {
     cloudSetupStatus,
     isCloudBootstrapPending,
     syncNow,
-    hasLocalEventsToImport,
-    importLocalEventsToCloud,
-    dismissLocalEventImport,
   } = useBudget();
 
-  const { isInstalled, showInstallGuide, triggerInstall, closeInstallGuide, hasNativePrompt } = usePwaInstall();
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   const { user, loading: authLoading, profileLoading, userProfileCompleted, userIntroCompleted, markUserIntroCompleted } = useAuth();
 
@@ -81,49 +73,31 @@ function BudgetAppContent() {
     setIsTourOpen(true);
   };
 
-  const localProfilePromptKey = user
-    ? `env_budget_profile_completed_${user.uid}`
-    : 'env_budget_profile_completed';
-
   useEffect(() => {
-    if (authLoading || profileLoading) return;
+    if (authLoading || profileLoading || !user) return;
 
-    const hasCompletedProfile = user
-      ? userProfileCompleted || localStorage.getItem(localProfilePromptKey) === 'true'
-      : localStorage.getItem(localProfilePromptKey) === 'true';
-
-    if (!hasCompletedProfile) {
+    if (!userProfileCompleted) {
       const timer = setTimeout(() => {
         setCurrentScreen({ type: 'profile', isOnboarding: true });
       }, 400);
       return () => clearTimeout(timer);
-    } else {
-      const hasCompletedIntro = user
-        ? userIntroCompleted || isFirstTimeIntroCompleted
-        : isFirstTimeIntroCompleted || localStorage.getItem('env_budget_first_time_intro_done') === 'true';
-
-      if (!hasCompletedIntro) {
-        const timer = setTimeout(() => {
-          handleOpenTourSafely();
-        }, 500);
-        return () => clearTimeout(timer);
-      }
     }
-  }, [authLoading, isFirstTimeIntroCompleted, localProfilePromptKey, profileLoading, user, userIntroCompleted, userProfileCompleted]);
+
+    if (!(userIntroCompleted || isFirstTimeIntroCompleted)) {
+      const timer = setTimeout(() => {
+        handleOpenTourSafely();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [authLoading, isFirstTimeIntroCompleted, profileLoading, user, userIntroCompleted, userProfileCompleted]);
 
   const handleCloseProfileScreen = () => {
     const wasOnboarding = currentScreen?.type === 'profile' && currentScreen.isOnboarding;
     setCurrentScreen(null);
-    if (wasOnboarding) {
-      localStorage.setItem(localProfilePromptKey, 'true');
-      const hasCompletedIntro = user
-        ? userIntroCompleted || isFirstTimeIntroCompleted
-        : isFirstTimeIntroCompleted || localStorage.getItem('env_budget_first_time_intro_done') === 'true';
-      if (!hasCompletedIntro) {
-        setTimeout(() => {
-          handleOpenTourSafely();
-        }, 250);
-      }
+    if (wasOnboarding && !(userIntroCompleted || isFirstTimeIntroCompleted)) {
+      setTimeout(() => {
+        handleOpenTourSafely();
+      }, 250);
     }
   };
 
@@ -499,14 +473,24 @@ function BudgetAppContent() {
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => handleOpenAddFunds()}
-                      id="envelopes-add-money-btn"
-                      className="w-full sm:w-auto sm:self-end min-h-11 sm:min-h-0 px-4 sm:px-2.5 py-2.5 sm:py-1 rounded-xl sm:rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-sm sm:text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                    >
-                      <PlusCircle className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#2C523B]" />
-                      <span>Add Money</span>
-                    </button>
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end sm:gap-2">
+                      <button
+                        onClick={handleOpenGeneralSpend}
+                        id="envelopes-log-money-btn"
+                        className="w-full sm:w-auto min-h-11 sm:min-h-0 px-4 sm:px-2.5 py-2.5 sm:py-1 rounded-xl sm:rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-sm sm:text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#B85D43]" />
+                        <span>Log Money</span>
+                      </button>
+                      <button
+                        onClick={() => handleOpenAddFunds()}
+                        id="envelopes-add-money-btn"
+                        className="w-full sm:w-auto min-h-11 sm:min-h-0 px-4 sm:px-2.5 py-2.5 sm:py-1 rounded-xl sm:rounded-lg border border-[#DCD5C9] dark:border-[#3D362F] hover:bg-[#EFEAE1] dark:hover:bg-[#28221D] text-sm sm:text-xs font-semibold text-[#1F1B16] dark:text-[#EDE8E1] flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                      >
+                        <PlusCircle className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-[#2C523B]" />
+                        <span>Add Money</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-2.5">
@@ -551,11 +535,22 @@ function BudgetAppContent() {
             )}
 
             {/* Tab 3: Category Management (§4.7) */}
-            {activeTab === 'categories' && <CategoryManagement />}
+            {activeTab === 'categories' && (
+              <CategoryManagement
+                onBack={() => {
+                  setActiveTab('envelopes');
+                  setCurrentScreen(null);
+                }}
+              />
+            )}
 
             {/* Tab 4: Settings & Sharing (§4.8 & §4.5) */}
             {activeTab === 'settings' && (
               <SettingsTab
+                onBack={() => {
+                  setActiveTab('envelopes');
+                  setCurrentScreen(null);
+                }}
                 onOpenInviteModal={() => {
                   setActiveTab('invite');
                   setCurrentScreen(null);
@@ -567,8 +562,6 @@ function BudgetAppContent() {
                   setCurrentScreen(null);
                 }}
                 onOpenProfileModal={() => setCurrentScreen({ type: 'profile', isOnboarding: false })}
-                onInstallPwa={triggerInstall}
-                isPwaInstalled={isInstalled}
                 onOpenTour={handleOpenTourSafely}
               />
             )}
@@ -610,36 +603,8 @@ function BudgetAppContent() {
         onOpenAddFundsModal={() => handleOpenAddFunds()}
         onOpenProfileModal={() => setCurrentScreen({ type: 'profile', isOnboarding: false })}
         onOpenTour={handleOpenTourSafely}
-        onOpenInstallModal={() => setIsInstallModalOpen(true)}
       />
 
-      <ResetDataWarningModal
-        isOpen={hasLocalEventsToImport}
-        onClose={dismissLocalEventImport}
-        onConfirm={async () => {
-          await importLocalEventsToCloud();
-        }}
-        title="Import this device’s budget?"
-        description="You have budget activity saved on this device. Import it into your signed-in household so it appears across your devices."
-        confirmText="Import to Cloud"
-        isZeroReset={false}
-        bulletPoints={[
-          'Your local transactions, top-ups, transfers, and allocations will be added to this household',
-          'The imported activity will sync to your signed-in Google household',
-          'Choosing Cancel keeps this cloud household empty for now',
-        ]}
-      />
-
-      {/* Progressive Web App Install Modal */}
-      <InstallAppModal
-        isOpen={!isInstalled && (isInstallModalOpen || showInstallGuide)}
-        onClose={() => {
-          setIsInstallModalOpen(false);
-          closeInstallGuide();
-        }}
-        onNativeInstall={triggerInstall}
-        hasNativePrompt={hasNativePrompt}
-      />
 
       {/* Interactive Onboarding Tour & Nomenclature Walkthrough */}
       <AppTourGuide
@@ -647,10 +612,11 @@ function BudgetAppContent() {
         onClose={() => setIsTourOpen(false)}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        isFirstTime={user ? !(userIntroCompleted || isFirstTimeIntroCompleted) : !isFirstTimeIntroCompleted}
-        onCompleteFirstTime={async () => {
-          localStorage.setItem('env_budget_first_time_intro_done', 'true');
-          await markUserIntroCompleted();
+        isFirstTime={Boolean(user && !(userIntroCompleted || isFirstTimeIntroCompleted))}
+        onCompleteFirstTime={() => {
+          void markUserIntroCompleted().catch(err => {
+            console.warn('Intro completion failed.', err);
+          });
         }}
       />
     </div>

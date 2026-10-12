@@ -9,9 +9,8 @@ A warm, family-friendly envelope-budgeting web app for planning monthly money, t
 - 🔁 **Move funds** — transfer money between envelopes when plans change.
 - 💳 **Credit-card reconciliation** — track pending and reconciled card spending.
 - 👨‍👩‍👧 **Household sharing** — manage trusted household access with Google sign-in and Firestore rules.
-- ☁️ **Cloud sync** — keep budgets synchronized through Firebase/Firestore.
-- 🎙️ **Voice intent parsing** — parse natural-language transactions with Gemini when configured, with a local fallback.
-- 📱 **PWA support** — install the app and use offline-friendly static assets.
+- ☁️ **Cloud-first sync** — save durable ledger changes through Firebase/Firestore for authorized Google accounts.
+- 🎙️ **Voice intent parsing** — parse natural-language transactions with Gemini when configured, with a deterministic parser fallback.
 
 ## 🧰 Tech stack
 
@@ -107,7 +106,7 @@ Recommended production order:
    ```bash
    firebase deploy --only firestore:rules
    ```
-4. Hard-refresh installed/PWA clients or unregister the old service worker if testing freshly deployed behavior.
+4. Load the deployed app once in any browser that previously installed it so the app can unregister legacy service workers and clear stale offline caches.
 
 ## 🔐 Environment variables
 
@@ -126,22 +125,22 @@ Without `GEMINI_API_KEY`, voice parsing intentionally falls back to deterministi
 src/App.tsx                 Main app shell and screen orchestration
 src/components/             UI components, modals, settings, sync, and household screens
 src/context/                Auth, API loading, and budget context providers
-src/store/                  Redux store, ledger slice, selectors, and sync middleware
-src/sync/                   Firestore sync engine, mappers, queue, and local cache
+src/store/                  Redux store, ledger slice, and selectors
+src/sync/                   Firestore event sync, household identity, and invitation helpers
 src/utils/                  Budget, currency, validation, date, and ledger utilities
 server.ts                   Express API and production/static server
 server/intentParser.ts      Shared Gemini/local voice parser
 netlify/functions/          Serverless API endpoints
-public/                     Manifest, service worker, icons, and static assets
+public/                     Icons and static assets
 docs/                       Architecture notes
 ```
 
 ## 📚 Architecture notes
 
 - 🧮 Monetary amounts are stored as integer paise.
-- 🧾 Ledger state is the source of truth and lives in Redux.
+- 🧾 Firestore event logs are the durable source of truth; Redux is the projected UI read model.
 - 🗑️ Domain records generally use soft deletion with `deleted_at`.
-- ☁️ Cloud writes require Firebase Auth and explicit import of local data before syncing.
+- ☁️ Ledger writes require Firebase Auth, authorized household access, and active Firestore connectivity.
 - 🛡️ Household access is enforced through owner-managed lowercase email allowlists and Firestore security rules.
 
 See also:

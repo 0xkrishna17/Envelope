@@ -1,10 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 
-interface LoadingState {
-  isLoading: boolean;
-  message: string | null;
-  progressPercent?: number;
-}
+export type PendingActionKey = string;
 
 interface ToastNotification {
   id: string;
@@ -19,6 +15,9 @@ interface ApiLoadingContextType {
   startApiCall: (message?: string | null) => () => void;
   setApiMessage: (message: string | null) => void;
   showToast: (message: string, type?: 'info' | 'success' | 'error') => void;
+  startAction: (key: PendingActionKey, message?: string | null) => () => void;
+  isActionPending: (key: PendingActionKey) => boolean;
+  runAction: <T>(key: PendingActionKey, message: string | null, action: () => Promise<T>) => Promise<T>;
 }
 
 const ApiLoadingContext = createContext<ApiLoadingContextType | undefined>(undefined);
@@ -27,6 +26,7 @@ export const ApiLoadingProvider: React.FC<{ children: ReactNode }> = ({ children
   const [activeCalls, setActiveCalls] = useState<number>(0);
   const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
+  const [pendingActionCounts, setPendingActionCounts] = useState<Record<PendingActionKey, number>>({});
 
   const startApiCall = useCallback((message?: string | null) => {
     setActiveCalls(prev => prev + 1);
@@ -48,6 +48,44 @@ export const ApiLoadingProvider: React.FC<{ children: ReactNode }> = ({ children
       }
     };
   }, []);
+
+  const startAction = useCallback((key: PendingActionKey, message?: string | null) => {
+    setPendingActionCounts(prev => ({
+      ...prev,
+      [key]: (prev[key] || 0) + 1,
+    }));
+    const stopApiCall = startApiCall(message);
+
+    let ended = false;
+    return () => {
+      if (ended) return;
+      ended = true;
+      setPendingActionCounts(prev => {
+        const current = prev[key] || 0;
+        if (current <= 1) {
+          const { [key]: _removed, ...rest } = prev;
+          return rest;
+        }
+        return { ...prev, [key]: current - 1 };
+      });
+      stopApiCall();
+    };
+  }, [startApiCall]);
+
+  const isActionPending = useCallback((key: PendingActionKey) => Boolean(pendingActionCounts[key]), [pendingActionCounts]);
+
+  const runAction = useCallback(async <T,>(
+    key: PendingActionKey,
+    message: string | null,
+    action: () => Promise<T>
+  ): Promise<T> => {
+    const stopAction = startAction(key, message);
+    try {
+      return await action();
+    } finally {
+      stopAction();
+    }
+  }, [startAction]);
 
   const setApiMessage = useCallback((message: string | null) => {
     setLoadingMessage(message);
@@ -72,6 +110,9 @@ export const ApiLoadingProvider: React.FC<{ children: ReactNode }> = ({ children
         startApiCall,
         setApiMessage,
         showToast,
+        startAction,
+        isActionPending,
+        runAction,
       }}
     >
       {/* Sleek Top Hairline Progress Bar */}
@@ -126,3 +167,12 @@ export const useApiLoading = () => {
   }
   return context;
 };
+
+export function usePendingAction(key: PendingActionKey) {
+  const { isActionPending, runAction } = useApiLoading();
+
+  return {
+    isPending: isActionPending(key),
+    run: <T,>(message: string | null, action: () => Promise<T>) => runAction(key, message, action),
+  };
+}
